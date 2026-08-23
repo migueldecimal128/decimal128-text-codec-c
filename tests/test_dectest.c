@@ -15,10 +15,15 @@
  * decimal128-text-codec-c and is MIT licensed.
  *
  * These are a third oracle, independent both of this codec and of the
- * decimal128-c engine that generated the string_bid_dpd corpus. They are what
- * makes the DPD declet table trustworthy rather than merely self-consistent:
- * 18 of the 24 redundant declets appear in no corpus row, and dqEncode pins
- * every one of them individually.
+ * decimal128-c engine that generated the text_bid_dpd corpus. That
+ * independence is the whole reason to keep them: if the engine were
+ * systematically wrong, the corpus would enshrine the error and agreeing with
+ * it would prove nothing. Cowlishaw's vectors predate this ecosystem entirely.
+ *
+ * (An earlier version of this note claimed 18 of the 24 redundant declets
+ * appear in no corpus row. That was measured false -- all 24 are in the
+ * noncanonical table, which carries 462 DPD-declet rows. The coverage argument
+ * does not hold; the independence argument above does.)
  *
  * Three kinds of vector, matching the suite's own operations:
  *   apply #hex -> text     renders an encoding

@@ -44,9 +44,19 @@ target_include_directories(decimal128_text_codec_portable PUBLIC include)
 target_compile_definitions(decimal128_text_codec_portable PRIVATE VERIFY_ENABLED=1 D128TEXT_NO_INT128)
 target_compile_options(decimal128_text_codec_portable PRIVATE ${D128TEXT_WARN_FLAGS})
 
-set(D128TEXT_VECTOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/vectors")
+# The conformance corpus is not carried here. decimal128-resources is mounted as
+# a submodule at <repo>/resources -- the same mount every decimal128 port uses --
+# and the tables are read from it directly. There is no copy, so there is nothing
+# to drift.
+set(D128TEXT_VECTOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/text_bid_dpd")
 
-foreach(t test_corpus test_bid_tostring test_bid_parse test_dpd test_dectest)
+if(NOT EXISTS "${D128TEXT_VECTOR_DIR}/text_bid128_dpd128_100.csv.txt")
+    message(FATAL_ERROR
+        "the decimal128-resources submodule is not checked out: no vectors at "
+        "${D128TEXT_VECTOR_DIR}. Run: git submodule update --init --recursive")
+endif()
+
+foreach(t test_corpus test_bid_parse test_dectest)
     add_executable(${t} tests/${t}.c)
     target_link_libraries(${t} PRIVATE decimal128_text_codec_verify)
     target_compile_definitions(${t} PRIVATE VECTOR_DIR="${D128TEXT_VECTOR_DIR}")
@@ -70,22 +80,9 @@ target_compile_definitions(test_declet PRIVATE VERIFY_ENABLED=1)
 target_compile_options(test_declet PRIVATE ${D128TEXT_WARN_FLAGS})
 add_test(NAME test_declet COMMAND test_declet)
 
-# The full canonical table (84,764 rows) is not vendored -- it is 10 MB. When a
-# sibling decimal128-resources checkout is present, run it too.
-set(D128TEXT_RESOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../decimal128-resources/string_bid_dpd")
-set(D128TEXT_CANONICAL "${D128TEXT_RESOURCES}/string_bid128_dpd128_canonical.csv.txt")
-if(EXISTS "${D128TEXT_CANONICAL}")
-    add_test(NAME test_corpus_canonical COMMAND test_corpus "${D128TEXT_CANONICAL}")
-endif()
-
-# tests/vectors is this family's corpus of record, copied out of
-# decimal128-resources. Copies drift silently, so when a sibling checkout is
-# present, check them -- allowing the two documented exemptions and nothing
-# else. CI runs the same script against a fresh clone, which is where it
-# actually bites; this registration is for the developer who has the sibling.
-if(NOT WIN32 AND EXISTS "${D128TEXT_RESOURCES}")
-    add_test(NAME test_vendored_corpus_drift
-             COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_vendored_corpus.sh"
-                     "${D128TEXT_RESOURCES}"
-                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/vectors")
-endif()
+# The full canonical table, 84,764 rows. It used to run only when a sibling
+# checkout happened to be present; the submodule is always there, so it is now an
+# unconditional test. It stays a separate registration rather than folding into
+# test_corpus so the portable (no-__int128) build does not pay for it twice.
+add_test(NAME test_corpus_canonical
+         COMMAND test_corpus "${D128TEXT_VECTOR_DIR}/text_bid128_dpd128_canonical.csv.txt")
