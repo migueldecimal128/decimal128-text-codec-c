@@ -161,12 +161,14 @@
 # rejection the codecs no longer perform, so they would fail every codec's
 # error table.
 #
-# WHY NOT FIX IT UPSTREAM. That file is GENERATED, from the decimal128-c engine,
+# WHY NOT FIX IT UPSTREAM. That file was GENERATED from the decimal128-c engine,
 # which still rejects these inputs and is right to -- the divergence is the
-# codecs', not the engine's. A hand patch there would be silently undone the
-# next time anyone regenerates, and would make a generated artifact disagree
-# with its generator. So upstream stays purely engine-truthful, and the
-# divergence lives in the repo that owns it: this one.
+# codecs', not the engine's, and upstream should stay a truthful statement of
+# what the ENGINE accepts. The generator has since been deleted, so the corpus
+# is now a fixed artifact: a hand patch there could never be checked against the
+# thing that produced it, and nobody could tell a deliberate edit from a
+# corruption. So upstream stays as generated, and the divergence lives in the
+# repo that owns it: this one.
 #
 # CONSEQUENCE FOR A NEW PORT. Copy these four .csv.txt files from
 # decimal128-text-codec-c. If you copy from decimal128-resources instead you

@@ -76,7 +76,8 @@ for f in $FILES; do
         exemptSeen=$(grep -cE "$EXEMPT" "$tmp/up" || true)
         if [ "$exemptSeen" -ne 2 ]; then
             echo "DRIFT $f: expected the 2 exempt rows upstream, found $exemptSeen" >&2
-            echo "       (upstream may have been regenerated or edited -- reread the" >&2
+            echo "       (upstream has been edited -- the corpus is a fixed artifact," >&2
+            echo "        its generator is gone, so reread the" >&2
             echo "        header note in the vendored copy before changing anything)" >&2
             status=1
         fi

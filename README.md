@@ -130,7 +130,8 @@ Two things worth knowing if you touch the tests:
   `tests/check_vendored_corpus.sh` diffs the four CSVs against a
   `decimal128-resources` checkout, permitting the two documented exemptions and
   nothing else — including the case where those two rows *stop* being in
-  upstream, which would mean it had been regenerated or edited. CTest registers
+  upstream, which would mean it had been edited: the corpus is a fixed artifact
+  whose generator no longer exists, so upstream should not move. CTest registers
   it when a sibling checkout exists; CI clones the (public) resources repo and
   runs it on every push, which is where it actually bites.
 - **`test_divpow10` exists because the corpus barely reaches that kernel.** On
