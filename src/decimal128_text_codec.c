@@ -1394,8 +1394,9 @@ static const char *parseInfinityText(uint64_t *hi, uint64_t *lo, bool sign,
  * must be the last character of the input. So NaN(1)2(3), NaN(1, NaN(1] and
  * NaN() are all rejected, and NaN[1] and NaN{1} are not this form at all.
  *
- * This is the one place the codecs accept text the full decimal128 ports
- * reject, and it is deliberate: C's own strtod reads NAN(n-char-sequence), so
+ * The full decimal128 ports accept the same spelling; the codecs had it first,
+ * and the ports took it on 2026-08-23. The reason it exists at all is that C's
+ * own strtod reads NAN(n-char-sequence), so
  * the spelling reaches a C caller from the platform itself. The resemblance
  * stops at the parentheses -- strtod's sequence is letters, digits and
  * underscores read as an implementation-defined integer (NAN(abc) and

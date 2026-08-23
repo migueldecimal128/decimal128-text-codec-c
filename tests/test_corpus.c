@@ -9,7 +9,7 @@
  *
  *   T1 DECODE  bid_hex -> text and dpd_hex -> text      (100, noncanonical)
  *   T2 ENCODE  text -> bid_hex and text -> dpd_hex      (100)
- *   T3 PARSE   input_text -> bits, both formats         (parse, 943 rows)
+ *   T3 PARSE   input_text -> bits, both formats         (parse, 945 rows)
  *   T4 ERROR   malformed input_text -> rejection        (error, 133 rows)
  *
  * Plus the cross-format assertion: for every row both encodings must render to
@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
     CHECK(rows == 1262, "the noncanonical file has %d rows, expected 1262", rows);
 
     rows = runParseTable(VECTOR_DIR "/string_bid128_dpd128_parse.csv.txt");
-    CHECK(rows == 943, "the parse file has %d rows, expected 943", rows);
+    CHECK(rows == 945, "the parse file has %d rows, expected 945", rows);
 
     rows = runErrorTable(VECTOR_DIR "/string_bid128_dpd128_error.csv.txt");
     CHECK(rows == 133, "the error file has %d rows, expected 133", rows);

@@ -71,8 +71,7 @@ int d128text_dpd128ToString(char *out, uint64_t hi, uint64_t lo);
  * matching the spelling C's own strtod reads. The form is positional and
  * balanced: '(' immediately after the word, at least one digit, ')' last;
  * NaN(), NaN(1, NaN(1)2(3), NaN[1] and NaN{1} are rejected. Rendering never
- * emits parentheses. This is the one construct the codec accepts that the full
- * decimal128 ports reject.
+ * emits parentheses. The full decimal128 ports accept the same spelling.
  *
  * More than 34 significant digits round to 34, ties-to-even. Magnitudes above
  * the representable range become Infinity; magnitudes below it become a

@@ -64,8 +64,8 @@ digits and underscores read as an implementation-defined integer, so `NAN(abc)`
 and `NAN(0x1c8)` are legal there and rejected here. Rendering never emits
 parentheses; `NaN(123)` parses and renders back as `NaN123`.
 
-**This is the one place the codecs accept text the full ports reject.** Text
-containing a parenthesised payload parses here and fails in `decimal128-c`.
+The full ports accept the same spelling — `decimal128-c` took it on 2026-08-23,
+closing what had been the codecs' one grammar divergence from them.
 
 **Rounding is ties-to-even, hardcoded**, and reachable only from the text →
 bits direction: more than 34 significant digits, overflow to Infinity, or
