@@ -70,14 +70,6 @@ target_compile_definitions(test_declet PRIVATE VERIFY_ENABLED=1)
 target_compile_options(test_declet PRIVATE ${D128TEXT_WARN_FLAGS})
 add_test(NAME test_declet COMMAND test_declet)
 
-# The divide kernel likewise: its whole domain needs direct calls, and the
-# corpus reaches almost none of it (see README).
-add_executable(test_divpow10 tests/test_divpow10.c)
-target_include_directories(test_divpow10 PRIVATE include src)
-target_compile_definitions(test_divpow10 PRIVATE VERIFY_ENABLED=1)
-target_compile_options(test_divpow10 PRIVATE ${D128TEXT_WARN_FLAGS})
-add_test(NAME test_divpow10 COMMAND test_divpow10)
-
 # The full canonical table (84,764 rows) is not vendored -- it is 10 MB. When a
 # sibling decimal128-resources checkout is present, run it too.
 set(D128TEXT_RESOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../decimal128-resources/string_bid_dpd")

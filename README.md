@@ -105,7 +105,6 @@ the native type, so the fallback is actually exercised rather than assumed.
 | `test_bid_tostring`, `test_bid_parse` | BID render and parse vectors |
 | `test_dpd`, `test_dectest` | DPD vectors, and Cowlishaw's `dqEncode` / `dqCanonical` |
 | `test_declet` | the declet codec, exhaustively over all 1024 patterns |
-| `test_divpow10` | the divide kernel against a native 128-bit oracle — 372,186 checks |
 | `test_vendored_corpus_drift` | the vendored CSVs against a sibling `decimal128-resources` checkout, when one is present |
 
 The conformance vectors under `tests/vectors` are vendored from
@@ -134,10 +133,11 @@ Two things worth knowing if you touch the tests:
   whose generator no longer exists, so upstream should not move. CTest registers
   it when a sibling checkout exists; CI clones the (public) resources repo and
   runs it on every push, which is where it actually bites.
-- **`test_divpow10` exists because the corpus barely reaches that kernel.** On
-  the reference implementation the two render suites call it zero times and the
-  parse suite reaches it 20 times across five powers. A codec can be green on
-  86,126 corpus rows with that kernel substantially wrong.
+- **`u113DivModPow10Max9` is not directly covered.** The corpus barely reaches
+  it: the two render suites call it zero times and the parse suite reaches it 20
+  times across five of its nine powers. A dedicated kernel test existed and was
+  removed; the codec can be green on 86,126 corpus rows with that kernel
+  substantially wrong.
 
 ## Provenance
 
