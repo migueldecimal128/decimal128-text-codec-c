@@ -1,0 +1,8 @@
+.DS_Store
+*~
+*.swp
+.vscode/
+/build/
+/build-*/
+compile_commands.json
+Testing/

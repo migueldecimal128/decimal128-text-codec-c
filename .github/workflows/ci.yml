@@ -1,0 +1,60 @@
+name: ci
+
+# The codec is one translation unit with no dependencies, so CI exists to cover
+# what a developer's host does not: the other compiler, the other OS, and the
+# synthesize-from-limbs path that a machine with __int128 never takes.
+#
+# No submodules: the conformance vectors are vendored under tests/vectors, so a
+# plain checkout is enough. The full canonical table is not vendored and its
+# test registers only when a sibling decimal128-resources checkout exists,
+# which is never the case here -- that one is a local probe.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    name: ${{ matrix.cc }} on ubuntu
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  macos:
+    name: clang on macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # MSVC has no __int128, so this job is the real check on the synthesized
+  # 64-bit path -- test_corpus_portable covers it elsewhere, but only here does
+  # the whole library take that route.
+  windows:
+    name: msvc on windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
