@@ -44,6 +44,21 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  # tests/vectors is a vendored copy of the shared corpus, and a copy nothing
+  # compares is a copy that drifts. decimal128-resources is public, so CI can
+  # clone it without credentials -- which makes this the job that actually
+  # enforces the relationship, rather than the local CTest registration that
+  # only fires for a developer who happens to have the sibling checked out.
+  corpus-drift:
+    name: vendored corpus vs upstream
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone decimal128-resources
+        run: git clone --depth 1 https://github.com/migueldecimal128/decimal128-resources.git ../decimal128-resources
+      - name: Check for drift
+        run: ./tests/check_vendored_corpus.sh ../decimal128-resources/string_bid_dpd tests/vectors
+
   # MSVC has no __int128, so this job is the real check on the synthesized
   # 64-bit path -- test_corpus_portable covers it elsewhere, but only here does
   # the whole library take that route.

@@ -80,8 +80,20 @@ add_test(NAME test_divpow10 COMMAND test_divpow10)
 
 # The full canonical table (84,764 rows) is not vendored -- it is 10 MB. When a
 # sibling decimal128-resources checkout is present, run it too.
-set(D128TEXT_CANONICAL
-    "${CMAKE_CURRENT_SOURCE_DIR}/../decimal128-resources/string_bid_dpd/string_bid128_dpd128_canonical.csv.txt")
+set(D128TEXT_RESOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../decimal128-resources/string_bid_dpd")
+set(D128TEXT_CANONICAL "${D128TEXT_RESOURCES}/string_bid128_dpd128_canonical.csv.txt")
 if(EXISTS "${D128TEXT_CANONICAL}")
     add_test(NAME test_corpus_canonical COMMAND test_corpus "${D128TEXT_CANONICAL}")
+endif()
+
+# tests/vectors is this family's corpus of record, copied out of
+# decimal128-resources. Copies drift silently, so when a sibling checkout is
+# present, check them -- allowing the two documented exemptions and nothing
+# else. CI runs the same script against a fresh clone, which is where it
+# actually bites; this registration is for the developer who has the sibling.
+if(NOT WIN32 AND EXISTS "${D128TEXT_RESOURCES}")
+    add_test(NAME test_vendored_corpus_drift
+             COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_vendored_corpus.sh"
+                     "${D128TEXT_RESOURCES}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/vectors")
 endif()
