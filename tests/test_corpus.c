@@ -10,7 +10,7 @@
  *   T1 DECODE  bid_hex -> text and dpd_hex -> text      (100, noncanonical)
  *   T2 ENCODE  text -> bid_hex and text -> dpd_hex      (100)
  *   T3 PARSE   input_text -> bits, both formats         (parse, 943 rows)
- *   T4 ERROR   malformed input_text -> rejection        (error, 135 rows)
+ *   T4 ERROR   malformed input_text -> rejection        (error, 133 rows)
  *
  * Plus the cross-format assertion: for every row both encodings must render to
  * the same text. That is the strongest property the corpus encodes.
@@ -277,7 +277,7 @@ int main(int argc, char **argv) {
     CHECK(rows == 943, "the parse file has %d rows, expected 943", rows);
 
     rows = runErrorTable(VECTOR_DIR "/string_bid128_dpd128_error.csv.txt");
-    CHECK(rows == 135, "the error file has %d rows, expected 135", rows);
+    CHECK(rows == 133, "the error file has %d rows, expected 133", rows);
 
     if (argc > 1) {
         rows = runDecodeTable(argv[1], "canonical");

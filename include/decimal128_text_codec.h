@@ -67,6 +67,13 @@ int d128text_dpd128ToString(char *out, uint64_t hi, uint64_t lo);
  * insensitive words Infinity, Inf, NaN, qNaN and sNaN, each with an optional
  * sign and an optional NaN payload of decimal digits.
  *
+ * A NaN payload may also be parenthesised -- NaN(123) as well as NaN123 --
+ * matching the spelling C's own strtod reads. The form is positional and
+ * balanced: '(' immediately after the word, at least one digit, ')' last;
+ * NaN(), NaN(1, NaN(1)2(3), NaN[1] and NaN{1} are rejected. Rendering never
+ * emits parentheses. This is the one construct the codec accepts that the full
+ * decimal128 ports reject.
+ *
  * More than 34 significant digits round to 34, ties-to-even. Magnitudes above
  * the representable range become Infinity; magnitudes below it become a
  * subnormal or zero. None of those are failures.

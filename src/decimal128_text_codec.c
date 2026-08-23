@@ -1387,6 +1387,20 @@ static const char *parseInfinityText(uint64_t *hi, uint64_t *lo, bool sign,
  * Parse NaN, qNaN or sNaN, case-insensitively, with an optional payload of
  * decimal digits. A payload of 34 or more digits AS WRITTEN is non-canonical
  * and reads as zero, per IEEE 754-2019 3.5.2.
+ *
+ * The payload may be written bare (NaN123) or enclosed in parentheses
+ * (NaN(123)). The parenthesised form is positional and balanced: the '(' must
+ * follow the word immediately, at least one digit must appear, and the ')'
+ * must be the last character of the input. So NaN(1)2(3), NaN(1, NaN(1] and
+ * NaN() are all rejected, and NaN[1] and NaN{1} are not this form at all.
+ *
+ * This is the one place the codecs accept text the full decimal128 ports
+ * reject, and it is deliberate: C's own strtod reads NAN(n-char-sequence), so
+ * the spelling reaches a C caller from the platform itself. The resemblance
+ * stops at the parentheses -- strtod's sequence is letters, digits and
+ * underscores read as an implementation-defined integer (NAN(abc) and
+ * NAN(0x1c8) are legal there), while a decimal128 payload is decimal digits.
+ * This is a paren-tolerant spelling of our own payload syntax, not C's.
  */
 static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign,
                                 int chFirst, const char *str, size_t startPos) {
@@ -1404,29 +1418,39 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
     uint64_t payloadDw0 = 0;
     uint64_t payloadDw1 = 0;
     ch = chAt(str, &pos);
-    if (ch != 0) {
+    bool hasParen = (ch == '(');
+    if (hasParen)
+        ch = chAt(str, &pos);
+    if (hasParen || ch != 0) {
         int accumDigitCount = 0;
         uint64_t accum19a = 0;
         uint64_t accum19b = 0;
-        do {
-            if (ch >= '0' && ch <= '9') {
-                int d = ch - '0';
-                /* Count every digit written, leading zeros included. The
-                 * 33-digit limit is a limit on the payload as spelled, not on
-                 * its significant digits, so "NaN" followed by forty zeros and
-                 * a one is over the limit and reads as zero. Leading zeros
-                 * contribute nothing to the accumulators, so the value of a
-                 * payload within the limit is unaffected. */
-                ++accumDigitCount;
-                if (accumDigitCount <= 19)
-                    accum19a = (accum19a * 10) + (uint64_t)d;
-                else
-                    accum19b = (accum19b * 10) + (uint64_t)d;
-            } else {
-                return "non-digit NaN payload character";
-            }
+        while (ch >= '0' && ch <= '9') {
+            int d = ch - '0';
+            /* Count every digit written, leading zeros included. The
+             * 33-digit limit is a limit on the payload as spelled, not on
+             * its significant digits, so "NaN" followed by forty zeros and
+             * a one is over the limit and reads as zero. Leading zeros
+             * contribute nothing to the accumulators, so the value of a
+             * payload within the limit is unaffected. */
+            ++accumDigitCount;
+            if (accumDigitCount <= 19)
+                accum19a = (accum19a * 10) + (uint64_t)d;
+            else
+                accum19b = (accum19b * 10) + (uint64_t)d;
             ch = chAt(str, &pos);
-        } while (ch != 0);
+        }
+        if (accumDigitCount == 0)
+            return hasParen ? "failure parsing NaN" : "non-digit NaN payload character";
+        if (hasParen) {
+            /* the ')' must be present and must end the input */
+            if (ch != ')')
+                return (ch == 0) ? "failure parsing NaN" : "non-digit NaN payload character";
+            if (chAt(str, &pos) != 0)
+                return "failure parsing NaN";
+        } else if (ch != 0) {
+            return "non-digit NaN payload character";
+        }
         if (accumDigitCount > 33) {
             payloadDw0 = 0;
             payloadDw1 = 0;

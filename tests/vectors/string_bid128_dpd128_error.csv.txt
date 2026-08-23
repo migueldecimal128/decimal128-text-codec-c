@@ -141,7 +141,40 @@
 "sNaN72.45" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , FAILURE_PARSING_NAN
 "sNaN-72" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , FAILURE_PARSING_NAN
 
-# ---- malformed (45 rows) ----
+# ============================================================================
+# THIS COPY IS THE TEXT-CODEC FAMILY'S CORPUS OF RECORD. Vendor from HERE, not
+# from decimal128-resources, and read this note before you do.
+#
+# It differs from resources/string_bid_dpd/string_bid128_dpd128_error.csv.txt
+# by exactly two rows, deliberately, since 2026-08-23:
+#
+#     "NaN(1)"   , 0x7C00... , 0x7C00... , FAILURE_PARSING_NAN
+#     "NaN(123)" , 0x7C00... , 0x7C00... , FAILURE_PARSING_NAN
+#
+# are present upstream and absent here, so this file has 133 data rows where
+# upstream has 135.
+#
+# WHY. The codecs accept a parenthesised NaN payload -- NaN(123) as well as
+# NaN123 -- which is the one construct they accept that the full decimal128
+# ports reject. C's own strtod reads NAN(n-char-sequence), so the spelling
+# reaches a C caller from the platform itself. Those two rows assert a
+# rejection the codecs no longer perform, so they would fail every codec's
+# error table.
+#
+# WHY NOT FIX IT UPSTREAM. That file is GENERATED, from the decimal128-c engine,
+# which still rejects these inputs and is right to -- the divergence is the
+# codecs', not the engine's. A hand patch there would be silently undone the
+# next time anyone regenerates, and would make a generated artifact disagree
+# with its generator. So upstream stays purely engine-truthful, and the
+# divergence lives in the repo that owns it: this one.
+#
+# CONSEQUENCE FOR A NEW PORT. Copy these four .csv.txt files from
+# decimal128-text-codec-c. If you copy from decimal128-resources instead you
+# will get two rows that contradict the parser you are writing, and you will
+# spend an afternoon working out which one is wrong. A drift check between this
+# copy and upstream must exempt these two rows.
+# ============================================================================
+# ---- malformed (43 rows) ----
 "" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , EMPTY_STRING
 "1..2" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , DOUBLE_DOT
 "1.2.3" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , DOUBLE_DOT
@@ -157,8 +190,6 @@
 "abc" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , INVALID_FORMAT
 "Infinit" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , FAILURE_PARSING_INFINITY
 "Infinityy" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , FAILURE_PARSING_INFINITY
-"NaN(1)" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , FAILURE_PARSING_NAN
-"NaN(123)" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , FAILURE_PARSING_NAN
 "NaNx" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , FAILURE_PARSING_NAN
 "sN" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , FAILURE_PARSING_NAN
 "Q" , 0x7C000000000000000000000000000000 , 0x7C000000000000000000000000000000 , FAILURE_PARSING_NAN

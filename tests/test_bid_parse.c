@@ -225,13 +225,34 @@ static const ParseCase parseCases[] = {
     {"7C000000000000000000000000003039", "NaN12345"},
     {"7E000000000000000000000000000001", "sNaN1"},
     {"7C000000000000000000000000000001", "qNaN1"},
-    {"invalid", "NaN(123)"},
+    {"7C00000000000000000000000000007B", "NaN(123)"},
+    {"7C000000000000000000000000000001", "NaN(1)"},
+    {"7E000000000000000000000000000005", "sNaN(5)"},
+    {"FC000000000000000000000000000007", "-NaN(7)"},
+    {"7C000000000000000000000000000001", "qNaN(1)"},
+    {"7C000000000000000000000000000000", "nan(0)"},
+    {"7C000000000000000000000000000001", "NaN(0001)"},
+    {"7C00314DC6448D9338C15B09FFFFFFFF", "NaN(999999999999999999999999999999999)"},
+    {"7C000000000000000000000000000000", "NaN(9999999999999999999999999999999999)"},
+    {"invalid", "NaN()"},
+    {"invalid", "sNaN()"},
+    {"invalid", "NaN("},
+    {"invalid", "NaN(1"},
+    {"invalid", "NaN(1]"},
+    {"invalid", "NaN(1)2(3)"},
+    {"invalid", "NaN(1)x"},
+    {"invalid", "NaN)1("},
     {"invalid", "NaN[123]"},
     {"invalid", "NaN{123}"},
-    {"invalid", "NaN(1)2(3)"},
-    {"invalid", "NaN(1)"},
-    {"invalid", "sNaN(5)"},
-    {"invalid", "NaN)1("},
+    {"invalid", "NaN[123)"},
+    {"invalid", "NaN{123)"},
+    {"invalid", "NaN(123]"},
+    {"invalid", "NaN(123}"},
+    {"invalid", "NaN (1)"},
+    {"invalid", "NaN(abc)"},
+    {"invalid", "NaN(0x1c8)"},
+    {"invalid", "NaN(1_2)"},
+    {"invalid", "NaN(-1)"},
     {"invalid", "NaN 1"},
     {"7C00314DC6448D9338C15B09FFFFFFFF", "NaN999999999999999999999999999999999"},
     {"7C0004EE2D6D415B85ACEF8100000000", "NaN100000000000000000000000000000000"},
@@ -316,6 +337,10 @@ static const char *const nanPayloadCases[] = {
     "NaN[1]",
     "sNaN(5)",
     "NaN)1(",
+    "NaN(123)",
+    "NaN()",
+    "NaN(1",
+    "NaN(1)2(3)",
     "NaN1",
     "NaN0001",
     "NaN000000000000000000000000000000001",
@@ -358,6 +383,41 @@ int main(void) {
         if (bErr == NULL && bLo <= 9) {
             CHECK(bHi == dHi && bLo == dLo, "<%s> encodes differently below payload 10", text);
         }
+    }
+
+    /* The parenthesised payload spelling is exactly the bare spelling: same
+     * bits, both encodings. Asserted as an equivalence rather than a second
+     * table of hex, so the two forms cannot drift apart. */
+    static const char *const payloads[] = {
+        "0", "1", "5", "9", "10", "0001", "12345", "999999999999999999",
+        "1000000000000000000", "999999999999999999999999999999999",
+        "9999999999999999999999999999999999",
+    };
+    static const char *const prefixes[] = {"NaN", "sNaN", "qNaN", "-NaN", "-sNaN"};
+    for (size_t i = 0; i < sizeof payloads / sizeof payloads[0]; ++i)
+        for (size_t j = 0; j < sizeof prefixes / sizeof prefixes[0]; ++j) {
+            char bare[80], paren[80];
+            snprintf(bare, sizeof bare, "%s%s", prefixes[j], payloads[i]);
+            snprintf(paren, sizeof paren, "%s(%s)", prefixes[j], payloads[i]);
+            uint64_t bHi, bLo, pHi, pLo;
+            CHECK(d128text_bid128Parse(&bHi, &bLo, bare) == NULL, "<%s>", bare);
+            CHECK(d128text_bid128Parse(&pHi, &pLo, paren) == NULL, "<%s>", paren);
+            CHECK(bHi == pHi && bLo == pLo, "bid: <%s> and <%s> differ", bare, paren);
+            CHECK(d128text_dpd128Parse(&bHi, &bLo, bare) == NULL, "<%s>", bare);
+            CHECK(d128text_dpd128Parse(&pHi, &pLo, paren) == NULL, "<%s>", paren);
+            CHECK(bHi == pHi && bLo == pLo, "dpd: <%s> and <%s> differ", bare, paren);
+        }
+
+    /* Rendering never emits parentheses, whichever spelling was parsed. */
+    {
+        uint64_t hi, lo;
+        char out[D128TEXT_MAX];
+        CHECK(d128text_bid128Parse(&hi, &lo, "NaN(123)") == NULL, "NaN(123)");
+        d128text_bid128ToString(out, hi, lo);
+        CHECK(strcmp(out, "NaN123") == 0, "NaN(123) rendered <%s>", out);
+        CHECK(d128text_dpd128Parse(&hi, &lo, "-sNaN(45)") == NULL, "-sNaN(45)");
+        d128text_dpd128ToString(out, hi, lo);
+        CHECK(strcmp(out, "-sNaN45") == 0, "-sNaN(45) rendered <%s>", out);
     }
 
     return testReport("test_bid_parse");
