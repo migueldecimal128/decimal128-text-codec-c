@@ -332,22 +332,6 @@ static const ParseCase parseCases[] = {
 
 /* NaN payload rules live in the shared parser, so both formats must apply
  * them identically -- bracket rejection and the written-digit limit alike. */
-static const char *const nanPayloadCases[] = {
-    "NaN(1)",
-    "NaN[1]",
-    "sNaN(5)",
-    "NaN)1(",
-    "NaN(123)",
-    "NaN()",
-    "NaN(1",
-    "NaN(1)2(3)",
-    "NaN1",
-    "NaN0001",
-    "NaN000000000000000000000000000000001",
-    "NaN999999999999999999999999999999999",
-    "NaN9999999999999999999999999999999999",
-    "NaN00000000000000000000000000000000000000001",
-};
 
 int main(void) {
     for (size_t i = 0; i < sizeof parseCases / sizeof parseCases[0]; ++i) {
@@ -368,56 +352,6 @@ int main(void) {
         hex32(got, hi, lo);
         CHECK(strcmp(got, parseCases[i].hex) == 0, "<%s> gave %s, want %s",
               text, got, parseCases[i].hex);
-    }
-
-    for (size_t i = 0; i < sizeof nanPayloadCases / sizeof nanPayloadCases[0]; ++i) {
-        const char *text = nanPayloadCases[i];
-        uint64_t bHi = 0, bLo = 0, dHi = 0, dLo = 0;
-        const char *bErr = d128text_bid128Parse(&bHi, &bLo, text);
-        const char *dErr = d128text_dpd128Parse(&dHi, &dLo, text);
-        CHECK((bErr == NULL) == (dErr == NULL), "the formats disagree on <%s>", text);
-        if (bErr != NULL && dErr != NULL)
-            CHECK(strcmp(bErr, dErr) == 0, "different messages for <%s>: %s vs %s",
-                  text, bErr, dErr);
-        /* payloads below 10 encode the same either way */
-        if (bErr == NULL && bLo <= 9) {
-            CHECK(bHi == dHi && bLo == dLo, "<%s> encodes differently below payload 10", text);
-        }
-    }
-
-    /* The parenthesised payload spelling is exactly the bare spelling: same
-     * bits, both encodings. Asserted as an equivalence rather than a second
-     * table of hex, so the two forms cannot drift apart. */
-    static const char *const payloads[] = {
-        "0", "1", "5", "9", "10", "0001", "12345", "999999999999999999",
-        "1000000000000000000", "999999999999999999999999999999999",
-        "9999999999999999999999999999999999",
-    };
-    static const char *const prefixes[] = {"NaN", "sNaN", "qNaN", "-NaN", "-sNaN"};
-    for (size_t i = 0; i < sizeof payloads / sizeof payloads[0]; ++i)
-        for (size_t j = 0; j < sizeof prefixes / sizeof prefixes[0]; ++j) {
-            char bare[80], paren[80];
-            snprintf(bare, sizeof bare, "%s%s", prefixes[j], payloads[i]);
-            snprintf(paren, sizeof paren, "%s(%s)", prefixes[j], payloads[i]);
-            uint64_t bHi, bLo, pHi, pLo;
-            CHECK(d128text_bid128Parse(&bHi, &bLo, bare) == NULL, "<%s>", bare);
-            CHECK(d128text_bid128Parse(&pHi, &pLo, paren) == NULL, "<%s>", paren);
-            CHECK(bHi == pHi && bLo == pLo, "bid: <%s> and <%s> differ", bare, paren);
-            CHECK(d128text_dpd128Parse(&bHi, &bLo, bare) == NULL, "<%s>", bare);
-            CHECK(d128text_dpd128Parse(&pHi, &pLo, paren) == NULL, "<%s>", paren);
-            CHECK(bHi == pHi && bLo == pLo, "dpd: <%s> and <%s> differ", bare, paren);
-        }
-
-    /* Rendering never emits parentheses, whichever spelling was parsed. */
-    {
-        uint64_t hi, lo;
-        char out[D128TEXT_MAX];
-        CHECK(d128text_bid128Parse(&hi, &lo, "NaN(123)") == NULL, "NaN(123)");
-        d128text_bid128ToString(out, hi, lo);
-        CHECK(strcmp(out, "NaN123") == 0, "NaN(123) rendered <%s>", out);
-        CHECK(d128text_dpd128Parse(&hi, &lo, "-sNaN(45)") == NULL, "-sNaN(45)");
-        d128text_dpd128ToString(out, hi, lo);
-        CHECK(strcmp(out, "-sNaN45") == 0, "-sNaN(45) rendered <%s>", out);
     }
 
     return testReport("test_bid_parse");

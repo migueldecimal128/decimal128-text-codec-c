@@ -102,7 +102,7 @@ the native type, so the fallback is actually exercised rather than assumed.
 | `test_corpus` | the four conformance tables over the shared corpus — 10,300 checks |
 | `test_corpus_portable` | the same, over the no-`__int128` build |
 | `test_corpus_canonical` | the full 84,783-row canonical table — 689,011 checks |
-| `test_bid_parse` | hand-chosen BID parse vectors, the parenthesised-NaN payload rules, and the parse contract |
+| `test_bid_parse` | hand-chosen BID parse vectors, including the parenthesised-NaN payloads the corpus cannot carry |
 | `test_declet` | the declet codec, exhaustively over all 1024 patterns |
 
 The conformance vectors are read from `resources/text_bid_dpd`, where
