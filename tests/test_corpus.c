@@ -10,13 +10,13 @@
  *
  *   T1 DECODE  bid_hex -> text and dpd_hex -> text      (100, noncanonical)
  *   T2 ENCODE  text -> bid_hex and text -> dpd_hex      (100)
- *   T3 PARSE   input_text -> bits, both formats         (parse, 945 rows)
+ *   T3 PARSE   input_text -> bits, both formats         (parse, 1,052 rows)
  *   T4 ERROR   malformed input_text -> rejection        (error, 133 rows)
  *
  * Plus the cross-format assertion: for every row both encodings must render to
  * the same text. That is the strongest property the corpus encodes.
  *
- * The `canonical` file (84,764 rows) is held out of this executable's default
+ * The `canonical` file (84,783 rows) is held out of this executable's default
  * run: pass its path as argv[1] to run it as T1 and T2. CMake registers that as
  * the separate test_corpus_canonical test, so the portable (no-__int128) build
  * does not pay for those rows twice.
