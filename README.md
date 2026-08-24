@@ -97,14 +97,13 @@ the native type, so the fallback is actually exercised rather than assumed.
 
 ## Tests
 
-Two source files, three CTest targets.
+One source file, three CTest targets.
 
 | file | target | what it covers |
 |---|---|---|
 | `tests/test_corpus_vectors.c` | `test_corpus_vectors` | the four conformance tables over the shared corpus — 10,982 checks |
 | | `test_corpus_vectors_portable` | the same, over the no-`__int128` build |
 | | `test_corpus_vectors_canonical` | the full 84,783-row canonical table — 689,247 checks |
-| `tests/test_util.h` | — | the CHECK macro and the hex helpers |
 
 That is the whole suite, and the shape is deliberate: **every test vector in this
 repo comes from the shared corpus.** There is no hand-written table left, and
