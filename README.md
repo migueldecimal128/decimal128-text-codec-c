@@ -123,10 +123,17 @@ cross-check rather than a tautology.
 
 Hand-written vector tables used to sit alongside the corpus here — BID render
 and parse vectors, DPD render and parse vectors, the Cowlishaw `dqEncode` /
-`dqCanonical` suite. They are gone. Every input they held that the corpus did
-not is now a corpus row, engine-authored, and the Cowlishaw files themselves
-live in `decimal128-resources` under `rosetta/dectest`, so nothing is beyond a
-reader's reach.
+`dqCanonical` suite, and the contract tests that rode with them. They are gone.
+Every input they held that the corpus did not is now a corpus row,
+engine-authored, and the Cowlishaw files themselves live in
+`decimal128-resources` under `rosetta/dectest`, so nothing is beyond a reader's
+reach.
+
+They were worth removing for a reason beyond duplication: the same tables were
+transcribed by hand into this port and its Swift and Kotlin siblings, and a
+whole vector shape — `apply #a -> #b` — had silently fallen out of all three
+copies at once. No test could have told us; it was found by joining against the
+source file.
 
 Three things worth knowing if you touch the tests:
 
