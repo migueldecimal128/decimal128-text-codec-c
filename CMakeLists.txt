@@ -71,14 +71,6 @@ target_compile_definitions(test_corpus_vectors_portable PRIVATE VECTOR_DIR="${D1
 target_compile_options(test_corpus_vectors_portable PRIVATE ${D128TEXT_WARN_FLAGS})
 add_test(NAME test_corpus_vectors_portable COMMAND test_corpus_vectors_portable)
 
-# The declet primitives are static, so this one includes the translation unit
-# rather than linking an archive -- the standard C way to test internals
-# without widening the published surface.
-add_executable(test_dpd_declet tests/test_dpd_declet.c)
-target_include_directories(test_dpd_declet PRIVATE include src)
-target_compile_definitions(test_dpd_declet PRIVATE VERIFY_ENABLED=1)
-target_compile_options(test_dpd_declet PRIVATE ${D128TEXT_WARN_FLAGS})
-add_test(NAME test_dpd_declet COMMAND test_dpd_declet)
 
 # The full canonical table, 84,764 rows. It used to run only when a sibling
 # checkout happened to be present; the submodule is always there, so it is now an

@@ -97,21 +97,27 @@ the native type, so the fallback is actually exercised rather than assumed.
 
 ## Tests
 
-Three source files, four CTest targets.
+Two source files, three CTest targets.
 
 | file | target | what it covers |
 |---|---|---|
 | `tests/test_corpus_vectors.c` | `test_corpus_vectors` | the four conformance tables over the shared corpus — 10,982 checks |
 | | `test_corpus_vectors_portable` | the same, over the no-`__int128` build |
 | | `test_corpus_vectors_canonical` | the full 84,783-row canonical table — 689,247 checks |
-| `tests/test_dpd_declet.c` | `test_dpd_declet` | the declet codec, exhaustively over all 1024 patterns — 3,048 checks |
 | `tests/test_util.h` | — | the CHECK macro and the hex helpers |
 
-That is the whole suite, and the shape is deliberate: **every conformance vector
-comes from the shared corpus — there is no hand-written vector left in this
-repo.** `test_dpd_declet` is the one test that holds data of its own, and it holds
-none: it enumerates the declet primitive's entire 1024-value domain, where no
-oracle exists or is required.
+That is the whole suite, and the shape is deliberate: **every test vector in this
+repo comes from the shared corpus.** There is no hand-written table left, and
+nothing reaches past the four public functions.
+
+An exhaustive unit test of the DPD declet primitives used to sit here too. It was
+removed once instrumentation showed the corpus already drives all 1024 declet
+patterns through `dpdDecodeDeclet` and all 1000 values through
+`dpdEncodeDeclet` — the canonical table supplying the 1000 by sheer volume, and
+the noncanonical table's 462 declet rows supplying the 24 patterns a canonical
+encoder never emits. What went with it is the *statement* that there are exactly
+24: the corpus proves each one decodes correctly without asserting how many there
+are.
 
 The conformance vectors are read from `resources/text_bid_dpd`, where
 `resources` is the `decimal128-resources` submodule — the same mount every
