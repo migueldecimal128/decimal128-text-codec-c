@@ -823,7 +823,7 @@ static int fnzToNormalizedScientificString(char *out, bool sign, int qExp, int d
 
 /*
  * Finite non-zero: pick the form. Integer when the quantum exponent is zero,
- * fixed-point when the value sits within six leading zeros of unity,
+ * fixed-point when the adjusted exponent is at least -6,
  * scientific otherwise -- the GDAS auto-select rule.
  */
 static int fnzString(char *out, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {

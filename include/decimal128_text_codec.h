@@ -18,14 +18,14 @@ extern "C" {
  * value type, no context, no status flags.
  *
  * This library provides no arithmetic, no comparison and no field extraction.
- * For the full IEEE 754-2019 decimal128 implementation see decimal128-c at
+ * For the full IEEE 754-2019 decimal128 implementation see
  * https://decimal128.com.
  *
  * Rounding, where the text -> bits direction requires it, is the IEEE 754-2019
  * roundTiesToEven attribute and is not configurable. Output form is the GDAS
  * to-scientific-string form and is not configurable.
  *
- * All four functions are pure and safe for concurrent use.
+ * All functions are pure and safe for concurrent use.
  */
 
 /*
@@ -34,12 +34,13 @@ extern "C" {
  *
  * The text itself reaches 42. The widest scientific form -9.999...E-6143 is
  * 1 sign, 1 digit, 1 radix point, 33 digits, 1 E, 1 sign and 4 exponent digits;
- * the widest plain form -0.000000999... is 1 sign, 1 zero, 1 radix point,
- * 6 leading zeros and 34 digits. Both reach exactly 42, and one more byte
- * carries the terminator.
+ * the widest plain form -0.00000999... is 1 sign, 1 zero, 1 radix point,
+ * 5 leading zeros and 34 digits. Each form reaches exactly 42, and one more
+ * byte carries the terminator.
  *
- * The plain form's six leading zeros are pinned by the GDAS rule that selects
- * it only when the adjusted exponent is at least -6, and the exponent field
+ * The plain form's five leading zeros are pinned by the GDAS rule that selects
+ * it only when the adjusted exponent is at least -6, which puts five zeros
+ * between the radix point and the first significant digit. The exponent field
  * cannot exceed four digits inside decimal128's range, so neither number can
  * drift without the format itself changing.
  *
