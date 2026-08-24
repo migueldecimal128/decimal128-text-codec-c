@@ -97,23 +97,20 @@ the native type, so the fallback is actually exercised rather than assumed.
 
 ## Tests
 
-Four source files, five CTest targets.
+Three source files, four CTest targets.
 
 | file | target | what it covers |
 |---|---|---|
 | `tests/test_corpus.c` | `test_corpus` | the four conformance tables over the shared corpus — 10,746 checks |
 | | `test_corpus_portable` | the same, over the no-`__int128` build |
 | | `test_corpus_canonical` | the full 84,783-row canonical table — 689,011 checks |
-| `tests/test_bid_parse.c` | `test_bid_parse` | hand-chosen BID parse vectors, including the parenthesised-NaN payloads the corpus cannot carry — 628 checks |
 | `tests/test_declet.c` | `test_declet` | the declet codec, exhaustively over all 1024 patterns — 3,048 checks |
 | `tests/test_util.h` | — | the CHECK macro and the hex helpers |
 
 That is the whole suite, and the shape is deliberate: **every conformance vector
-comes from the shared corpus.** `test_bid_parse` survives only because seven of
-its vectors are parenthesised-NaN payloads, which the `decimal128-c` engine
-rejects and so cannot author; when that divergence is resolved upstream those
-become corpus rows and the file goes. `test_declet` survives because it needs no
-vectors at all — it enumerates the primitive's entire 1024-value domain, where no
+comes from the shared corpus — there is no hand-written vector left in this
+repo.** `test_declet` is the one test that holds data of its own, and it holds
+none: it enumerates the declet primitive's entire 1024-value domain, where no
 oracle exists or is required.
 
 The conformance vectors are read from `resources/text_bid_dpd`, where

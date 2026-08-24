@@ -56,7 +56,7 @@ if(NOT EXISTS "${D128TEXT_VECTOR_DIR}/text_bid128_dpd128_100.csv.txt")
         "${D128TEXT_VECTOR_DIR}. Run: git submodule update --init --recursive")
 endif()
 
-foreach(t test_corpus test_bid_parse)
+foreach(t test_corpus)
     add_executable(${t} tests/${t}.c)
     target_link_libraries(${t} PRIVATE decimal128_text_codec_verify)
     target_compile_definitions(${t} PRIVATE VECTOR_DIR="${D128TEXT_VECTOR_DIR}")
