@@ -16,7 +16,7 @@ For the complete decimal128 implementation see `decimal128-c` at
 ```c
 #include "decimal128_text_codec.h"
 
-char out[D128TEXT_MAX];
+char out[D128TEXT_MAX_LEN + 1];
 int len = d128text_bid128ToString(out, hi, lo);   /* cannot fail */
 int len = d128text_dpd128ToString(out, hi, lo);
 

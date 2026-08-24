@@ -666,7 +666,7 @@ static int appendInt(char *out, int v) {
 static int infString(char *out, bool sign) {
     const char *s = sign ? "-Infinity" : "Infinity";
     int len = (int)strlen(s);
-    demand(len + 1 <= D128TEXT_MAX);
+    demand(len <= D128TEXT_MAX_LEN);
     memcpy(out, s, (size_t)len + 1);
     return len;
 }
@@ -683,13 +683,13 @@ static int nanString(char *out, bool sign, bool isSignaling, uint64_t payloadHi,
         /* non-canonical payload, IEEE 754-2019 3.5.2 c) 2) -- read as zero */
         payloadHi > MAX_PAYLOAD_HI ||
         (payloadHi == MAX_PAYLOAD_HI && payloadLo > MAX_PAYLOAD_LO)) {
-        demand(baseLen + 1 <= D128TEXT_MAX);
+        demand(baseLen <= D128TEXT_MAX_LEN);
         memcpy(out, base, (size_t)baseLen + 1);
         return baseLen;
     }
     int digitLen = calcDigitLen128(payloadHi, payloadLo);
     int totalLen = baseLen + digitLen;
-    demand(totalLen + 1 <= D128TEXT_MAX);
+    demand(totalLen <= D128TEXT_MAX_LEN);
     memcpy(out, base, (size_t)baseLen);
     u128ToAscii(digitLen, payloadHi, payloadLo, out, baseLen);
     out[totalLen] = '\0';
@@ -707,7 +707,7 @@ static int zerString(char *out, bool sign, int qExp) {
         int index = (-qExp + (signBit << 3)) & 0x0F;
         const char *s = ZEROS[index];
         int len = (int)strlen(s);
-        demand(len + 1 <= D128TEXT_MAX);
+        demand(len <= D128TEXT_MAX_LEN);
         memcpy(out, s, (size_t)len + 1);
         return len;
     }
@@ -717,7 +717,7 @@ static int zerString(char *out, bool sign, int qExp) {
     else
         base = sign ? "-0E" : "0E"; /* qExp is negative and prints its own sign */
     int baseLen = (int)strlen(base);
-    demand(baseLen + 6 <= D128TEXT_MAX);
+    demand(baseLen + 6 <= D128TEXT_MAX_LEN);
     memcpy(out, base, (size_t)baseLen);
     int len = baseLen + appendInt(out + baseLen, qExp);
     out[len] = '\0';
@@ -729,7 +729,7 @@ static int fnzToIntegerString(char *out, bool sign, int digitLen, uint64_t dw1, 
     verify(digitLen > 0);
     int signLen = sign ? 1 : 0;
     int totalLen = signLen + digitLen;
-    demand(totalLen + 1 <= D128TEXT_MAX);
+    demand(totalLen <= D128TEXT_MAX_LEN);
     out[0] = '-'; /* overwritten by the first digit when unsigned */
     u128ToAscii(digitLen, dw1, dw0, out, signLen);
     out[totalLen] = '\0';
@@ -748,7 +748,7 @@ static int fnzToDecimalPointString(char *out, bool sign, int qExp, int digitLen,
     int signLen = sign ? 1 : 0;
     int decimalPointLen = 1;
     int totalLen = signLen + leadingZeroCount + decimalPointLen + digitLen;
-    demand(totalLen + 1 <= D128TEXT_MAX);
+    demand(totalLen <= D128TEXT_MAX_LEN);
     out[0] = '-';
     for (int i = signLen; i <= leadingZeroCount; ++i) /* one extra, overwritten below */
         out[i] = '0';
@@ -776,7 +776,7 @@ static int fnzToNormalizedScientificString(char *out, bool sign, int qExp, int d
     int expDigitLen =
         (eExpAbs >= 1000) ? 4 : (eExpAbs >= 100) ? 3 : (eExpAbs >= 10) ? 2 : 1;
     int totalLen = signLen + decimalPointLen + digitLen + expELen + expSignLen + expDigitLen;
-    demand(totalLen + 1 <= D128TEXT_MAX);
+    demand(totalLen <= D128TEXT_MAX_LEN);
     out[0] = '-';
     u128ToAscii(digitLen, dw1, dw0, out, signLen + decimalPointLen);
     if (decimalPointLen > 0) {

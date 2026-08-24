@@ -29,18 +29,34 @@ extern "C" {
  */
 
 /*
- * Buffer size for the two ToString functions, NUL included. The longest
- * possible output is 43 bytes with its terminator (a plain-form value: sign,
- * six leading zeros, radix point and 34 digits); this is that bound with
- * headroom, so a caller never has to think about it.
+ * The exact bound on a rendered decimal128, NOT counting the NUL. The widest
+ * scientific form -9.999...E-6143 is 1 sign, 1 digit, 1 radix point, 33 digits,
+ * 1 E, 1 sign and 4 exponent digits; the widest plain form -0.000000999... is
+ * 1 sign, 1 zero, 1 radix point, 6 leading zeros and 34 digits. Both reach
+ * exactly 42.
+ *
+ * The plain form's six leading zeros are pinned by the GDAS rule that selects
+ * it only when the adjusted exponent is at least -6, and the exponent field
+ * cannot exceed four digits inside decimal128's range, so neither number can
+ * drift without the format itself changing.
+ *
+ * Every write in the renderers is guarded against this constant. Sizing it
+ * exactly rather than generously is what turns those guards into real checks:
+ * with slack, an error in the arithmetic above would quietly consume the slack
+ * instead of firing.
+ *
+ * This is the same number, and the same meaning, as MAX_LEN / MaxLen / max_len
+ * in the Rust, Go and Zig ports. Those write no terminator, so it is also their
+ * buffer size; a C caller adds one for the NUL and declares
+ * `char out[D128TEXT_MAX_LEN + 1]`.
  */
-#define D128TEXT_MAX 64
+#define D128TEXT_MAX_LEN 42
 
 /*
  * Render a BID128 / DPD128 encoding as a decimal character sequence.
  *
  * Writes a NUL-terminated string into `out`, which must have room for
- * D128TEXT_MAX bytes, and returns the length not counting the NUL.
+ * D128TEXT_MAX_LEN + 1 bytes, and returns the length not counting the NUL.
  *
  * These cannot fail. Every 128-bit pattern renders: canonical encodings
  * produce their natural form, and a non-canonical BID coefficient (>= 10^34)
