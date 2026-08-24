@@ -1164,7 +1164,7 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
      * a path that has never once executed -- and therefore has never been
      * verified to work -- it is removed and the invariant is enforced.
      *
-     * Measured: zero occurrences across the 86,126-row corpus and 400,000
+     * Measured: zero occurrences across the 87k-row corpus and 400,000
      * random numerals, and across 76,280 finalizer calls driven by inputs of
      * up to 5,000 digits, where the widest coefficient ever seen was 34.
      *
