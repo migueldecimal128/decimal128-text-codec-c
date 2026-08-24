@@ -661,36 +661,50 @@ static int appendInt(char *out, int v) {
  *
  * These four know nothing about BID or DPD: both decoders reduce an encoding
  * to (sign, qExp, coefficient) and hand it here.
+ *
+ * None of the optional leading characters live in the string data. The sign,
+ * and the 's' that marks a signaling NaN, are each written unconditionally and
+ * then overwritten by whatever follows when they are not wanted -- the trick
+ * fnzToIntegerString already uses for the sign. That holds only because every
+ * optional character is a single byte at the front of the form: a spelling
+ * that ever put one elsewhere would render wrong rather than fail to compile.
+ * The one exception is written where it happens, in zerString's exponent form,
+ * where the byte is a TRAILING '+' overwritten by appendInt's own '-'.
  * ------------------------------------------------------------------------ */
 
+static const char INFINITY_TEXT[] = "Infinity";
+
 static int infString(char *out, bool sign) {
-    const char *s = sign ? "-Infinity" : "Infinity";
-    int len = (int)strlen(s);
-    demand(len + 1 <= D128TEXT_MAX_LEN);
-    memcpy(out, s, (size_t)len + 1);
-    return len;
+    int signLen = sign ? 1 : 0;
+    int totalLen = signLen + (int)sizeof(INFINITY_TEXT) - 1;
+    demand(totalLen + 1 <= D128TEXT_MAX_LEN);
+    out[0] = '-'; /* overwritten by the 'I' when unsigned */
+    memcpy(out + signLen, INFINITY_TEXT, sizeof(INFINITY_TEXT));
+    return totalLen;
 }
 
+static const char NAN_TEXT[] = "NaN";
+
 static int nanString(char *out, bool sign, bool isSignaling, uint64_t payloadHi, uint64_t payloadLo) {
-    const char *base;
-    if (!isSignaling)
-        base = sign ? "-NaN" : "NaN";
-    else
-        base = sign ? "-sNaN" : "sNaN";
-    int baseLen = (int)strlen(base);
+    int signLen = sign ? 1 : 0;
+    int sLen = isSignaling ? 1 : 0;
+    int wordOff = signLen + sLen;
+    int baseLen = wordOff + (int)sizeof(NAN_TEXT) - 1;
+    out[0] = '-';       /* overwritten by the 's' or the 'N' when unsigned */
+    out[signLen] = 's'; /* overwritten by the 'N' when quiet */
 
     if ((payloadHi | payloadLo) == 0 ||
         /* non-canonical payload, IEEE 754-2019 3.5.2 c) 2) -- read as zero */
         payloadHi > MAX_PAYLOAD_HI ||
         (payloadHi == MAX_PAYLOAD_HI && payloadLo > MAX_PAYLOAD_LO)) {
         demand(baseLen + 1 <= D128TEXT_MAX_LEN);
-        memcpy(out, base, (size_t)baseLen + 1);
+        memcpy(out + wordOff, NAN_TEXT, sizeof(NAN_TEXT));
         return baseLen;
     }
     int digitLen = calcDigitLen128(payloadHi, payloadLo);
     int totalLen = baseLen + digitLen;
     demand(totalLen + 1 <= D128TEXT_MAX_LEN);
-    memcpy(out, base, (size_t)baseLen);
+    memcpy(out + wordOff, NAN_TEXT, sizeof(NAN_TEXT) - 1);
     u128ToAscii(digitLen, payloadHi, payloadLo, out, baseLen);
     out[totalLen] = '\0';
     return totalLen;
@@ -700,14 +714,11 @@ static int nanString(char *out, bool sign, bool isSignaling, uint64_t payloadHi,
  * Every plain-form zero is a prefix of this literal. k = -qExp is the count of
  * zeros after the radix point, so k = 0 renders "0" with no radix point at all
  * and k >= 1 renders "0." followed by k zeros -- lengths 1 and k + 2.
- *
- * The sign is not in the data. It is written into out[0] unconditionally and
- * overwritten by the '0' when the value is positive, the same trick the finite
- * renderers use. That works because the negative spelling of every form here is
- * the positive spelling with one byte in front; a form that ever put the sign
- * anywhere else would render wrong rather than fail to compile.
  */
 static const char PLAIN_ZERO[] = "0.000000";
+
+/* The exponent form's base. The '+' is not here: see zerString below. */
+static const char ZERO_EXP_TEXT[] = "0E";
 
 static int zerString(char *out, bool sign, int qExp) {
     if (qExp <= 0 && qExp >= -6) {
@@ -721,14 +732,23 @@ static int zerString(char *out, bool sign, int qExp) {
         out[totalLen] = '\0';
         return totalLen;
     }
-    const char *base;
-    if (qExp > 0)
-        base = sign ? "-0E+" : "0E+";
-    else
-        base = sign ? "-0E" : "0E"; /* qExp is negative and prints its own sign */
-    int baseLen = (int)strlen(base);
+    int signLen = sign ? 1 : 0;
+    int wordLen = (int)sizeof(ZERO_EXP_TEXT) - 1;
+    /*
+     * A positive exponent needs an explicit '+'; a negative one prints its own
+     * '-' from appendInt. Write the '+' unconditionally and let appendInt land
+     * on top of it when qExp < 0 -- the same discipline as the leading sign,
+     * pointed the other way. It is correct only because appendInt emits a '-'
+     * for a negative value and emits nothing for a positive one, and because
+     * the plain form above has already taken every qExp in [-6, 0], so this
+     * branch never sees zero.
+     */
+    int plusLen = (qExp > 0) ? 1 : 0;
+    int baseLen = signLen + wordLen + plusLen;
     demand(baseLen + 6 <= D128TEXT_MAX_LEN);
-    memcpy(out, base, (size_t)baseLen);
+    out[0] = '-'; /* overwritten by the '0' when unsigned */
+    memcpy(out + signLen, ZERO_EXP_TEXT, (size_t)wordLen);
+    out[signLen + wordLen] = '+'; /* overwritten by appendInt's '-' when qExp < 0 */
     int len = baseLen + appendInt(out + baseLen, qExp);
     out[len] = '\0';
     return len;
