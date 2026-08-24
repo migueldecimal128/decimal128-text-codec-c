@@ -209,8 +209,8 @@ static int runDecodeTable(const char *path, const char *label) {
             CHECK(false, "%s row %d: malformed hex column <%s> <%s>", label, rows, row.bidHex, row.dpdHex);
             continue;
         }
-        char bidText[D128TEXT_MAX_LEN + 1];
-        char dpdText[D128TEXT_MAX_LEN + 1];
+        char bidText[D128TEXT_MAX_LEN];
+        char dpdText[D128TEXT_MAX_LEN];
         int bidLen = d128text_bid128ToString(bidText, bidHi, bidLo);
         int dpdLen = d128text_dpd128ToString(dpdText, dpdHi, dpdLo);
         CHECK(strcmp(bidText, row.text) == 0, "%s row %d: bid %s rendered <%s>, want <%s>",
