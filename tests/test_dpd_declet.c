@@ -93,5 +93,5 @@ int main(void) {
               (unsigned long long)v, (unsigned long long)back);
     }
 
-    return testReport("test_declet");
+    return testReport("test_dpd_declet");
 }

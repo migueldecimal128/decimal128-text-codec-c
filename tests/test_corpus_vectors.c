@@ -18,7 +18,7 @@
  *
  * The `canonical` file (84,783 rows) is held out of this executable's default
  * run: pass its path as argv[1] to run it as T1 and T2. CMake registers that as
- * the separate test_corpus_canonical test, so the portable (no-__int128) build
+ * the separate test_corpus_vectors_canonical test, so the portable (no-__int128) build
  * does not pay for those rows twice.
  *
  * READER NOTE, and this bites every port: `parse` and `error` double-quote
@@ -288,5 +288,5 @@ int main(int argc, char **argv) {
         CHECK(rows == 84783, "the canonical file has %d rows, expected 84783", rows);
     }
 
-    return testReport("test_corpus");
+    return testReport("test_corpus_vectors");
 }

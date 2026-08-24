@@ -56,7 +56,7 @@ if(NOT EXISTS "${D128TEXT_VECTOR_DIR}/text_bid128_dpd128_100.csv.txt")
         "${D128TEXT_VECTOR_DIR}. Run: git submodule update --init --recursive")
 endif()
 
-foreach(t test_corpus)
+foreach(t test_corpus_vectors)
     add_executable(${t} tests/${t}.c)
     target_link_libraries(${t} PRIVATE decimal128_text_codec_verify)
     target_compile_definitions(${t} PRIVATE VECTOR_DIR="${D128TEXT_VECTOR_DIR}")
@@ -65,24 +65,24 @@ foreach(t test_corpus)
 endforeach()
 
 # The whole corpus again over the no-__int128 build of the library.
-add_executable(test_corpus_portable tests/test_corpus.c)
-target_link_libraries(test_corpus_portable PRIVATE decimal128_text_codec_portable)
-target_compile_definitions(test_corpus_portable PRIVATE VECTOR_DIR="${D128TEXT_VECTOR_DIR}")
-target_compile_options(test_corpus_portable PRIVATE ${D128TEXT_WARN_FLAGS})
-add_test(NAME test_corpus_portable COMMAND test_corpus_portable)
+add_executable(test_corpus_vectors_portable tests/test_corpus_vectors.c)
+target_link_libraries(test_corpus_vectors_portable PRIVATE decimal128_text_codec_portable)
+target_compile_definitions(test_corpus_vectors_portable PRIVATE VECTOR_DIR="${D128TEXT_VECTOR_DIR}")
+target_compile_options(test_corpus_vectors_portable PRIVATE ${D128TEXT_WARN_FLAGS})
+add_test(NAME test_corpus_vectors_portable COMMAND test_corpus_vectors_portable)
 
 # The declet primitives are static, so this one includes the translation unit
 # rather than linking an archive -- the standard C way to test internals
 # without widening the published surface.
-add_executable(test_declet tests/test_declet.c)
-target_include_directories(test_declet PRIVATE include src)
-target_compile_definitions(test_declet PRIVATE VERIFY_ENABLED=1)
-target_compile_options(test_declet PRIVATE ${D128TEXT_WARN_FLAGS})
-add_test(NAME test_declet COMMAND test_declet)
+add_executable(test_dpd_declet tests/test_dpd_declet.c)
+target_include_directories(test_dpd_declet PRIVATE include src)
+target_compile_definitions(test_dpd_declet PRIVATE VERIFY_ENABLED=1)
+target_compile_options(test_dpd_declet PRIVATE ${D128TEXT_WARN_FLAGS})
+add_test(NAME test_dpd_declet COMMAND test_dpd_declet)
 
 # The full canonical table, 84,764 rows. It used to run only when a sibling
 # checkout happened to be present; the submodule is always there, so it is now an
 # unconditional test. It stays a separate registration rather than folding into
-# test_corpus so the portable (no-__int128) build does not pay for it twice.
-add_test(NAME test_corpus_canonical
-         COMMAND test_corpus "${D128TEXT_VECTOR_DIR}/text_bid128_dpd128_canonical.csv.txt")
+# test_corpus_vectors so the portable (no-__int128) build does not pay for it twice.
+add_test(NAME test_corpus_vectors_canonical
+         COMMAND test_corpus_vectors "${D128TEXT_VECTOR_DIR}/text_bid128_dpd128_canonical.csv.txt")

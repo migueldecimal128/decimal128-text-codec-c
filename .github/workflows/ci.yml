@@ -7,7 +7,7 @@ name: ci
 # The conformance vectors come from decimal128-resources, mounted as a submodule
 # at <repo>/resources, so every checkout below needs `submodules: recursive` --
 # without it CMake fails configure rather than silently skipping the corpus. The
-# full 84,764-row canonical table comes with it, so test_corpus_canonical runs
+# full 84,764-row canonical table comes with it, so test_corpus_vectors_canonical runs
 # everywhere now instead of only on a developer's host.
 
 on:
@@ -50,7 +50,7 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   # MSVC has no __int128, so this job is the real check on the synthesized
-  # 64-bit path -- test_corpus_portable covers it elsewhere, but only here does
+  # 64-bit path -- test_corpus_vectors_portable covers it elsewhere, but only here does
   # the whole library take that route.
   windows:
     name: msvc on windows

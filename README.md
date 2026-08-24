@@ -92,7 +92,7 @@ them with `-DVERIFY_ENABLED=1`.
 
 `unsigned __int128` is used when the compiler has it and synthesized from
 64-bit limbs when it does not, so the codec builds on MSVC. The
-`test_corpus_portable` target forces the synthesized path on a machine that has
+`test_corpus_vectors_portable` target forces the synthesized path on a machine that has
 the native type, so the fallback is actually exercised rather than assumed.
 
 ## Tests
@@ -101,15 +101,15 @@ Three source files, four CTest targets.
 
 | file | target | what it covers |
 |---|---|---|
-| `tests/test_corpus.c` | `test_corpus` | the four conformance tables over the shared corpus — 10,746 checks |
-| | `test_corpus_portable` | the same, over the no-`__int128` build |
-| | `test_corpus_canonical` | the full 84,783-row canonical table — 689,011 checks |
-| `tests/test_declet.c` | `test_declet` | the declet codec, exhaustively over all 1024 patterns — 3,048 checks |
+| `tests/test_corpus_vectors.c` | `test_corpus_vectors` | the four conformance tables over the shared corpus — 10,982 checks |
+| | `test_corpus_vectors_portable` | the same, over the no-`__int128` build |
+| | `test_corpus_vectors_canonical` | the full 84,783-row canonical table — 689,247 checks |
+| `tests/test_dpd_declet.c` | `test_dpd_declet` | the declet codec, exhaustively over all 1024 patterns — 3,048 checks |
 | `tests/test_util.h` | — | the CHECK macro and the hex helpers |
 
 That is the whole suite, and the shape is deliberate: **every conformance vector
 comes from the shared corpus — there is no hand-written vector left in this
-repo.** `test_declet` is the one test that holds data of its own, and it holds
+repo.** `test_dpd_declet` is the one test that holds data of its own, and it holds
 none: it enumerates the declet primitive's entire 1024-value domain, where no
 oracle exists or is required.
 
