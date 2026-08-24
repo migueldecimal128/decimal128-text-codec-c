@@ -696,20 +696,30 @@ static int nanString(char *out, bool sign, bool isSignaling, uint64_t payloadHi,
     return totalLen;
 }
 
-static const char *const ZEROS[16] = {
-    "0", "0.0", "0.00", "0.000", "0.0000", "0.00000", "0.000000", "",
-    "-0", "-0.0", "-0.00", "-0.000", "-0.0000", "-0.00000", "-0.000000", "",
-};
+/*
+ * Every plain-form zero is a prefix of this literal. k = -qExp is the count of
+ * zeros after the radix point, so k = 0 renders "0" with no radix point at all
+ * and k >= 1 renders "0." followed by k zeros -- lengths 1 and k + 2.
+ *
+ * The sign is not in the data. It is written into out[0] unconditionally and
+ * overwritten by the '0' when the value is positive, the same trick the finite
+ * renderers use. That works because the negative spelling of every form here is
+ * the positive spelling with one byte in front; a form that ever put the sign
+ * anywhere else would render wrong rather than fail to compile.
+ */
+static const char PLAIN_ZERO[] = "0.000000";
 
 static int zerString(char *out, bool sign, int qExp) {
     if (qExp <= 0 && qExp >= -6) {
-        int signBit = sign ? 1 : 0;
-        int index = (-qExp + (signBit << 3)) & 0x0F;
-        const char *s = ZEROS[index];
-        int len = (int)strlen(s);
-        demand(len + 1 <= D128TEXT_MAX_LEN);
-        memcpy(out, s, (size_t)len + 1);
-        return len;
+        int k = -qExp;
+        int zeroLen = (k == 0) ? 1 : k + 2;
+        int signLen = sign ? 1 : 0;
+        int totalLen = signLen + zeroLen;
+        demand(totalLen + 1 <= D128TEXT_MAX_LEN);
+        out[0] = '-'; /* overwritten by the '0' when unsigned */
+        memcpy(out + signLen, PLAIN_ZERO, (size_t)zeroLen);
+        out[totalLen] = '\0';
+        return totalLen;
     }
     const char *base;
     if (qExp > 0)
