@@ -457,6 +457,8 @@ static uint64_t binFromDeclets(uint64_t declets) {
     uint64_t multiplier = 1;
     while (rest != 0) {
         bin += dpdDecodeDeclet(rest & 0x3FF) * multiplier;
+        /* The last iteration multiplies past 10^18 and the product is never
+         * used, since `rest` is zero by then. The reference wraps here too. */
         multiplier *= 1000;
         rest >>= 10;
     }
@@ -496,8 +498,6 @@ static uint64_t decletsFromBin(uint64_t bin) {
 #define M_U64_DIV_1E4 0x346DC5D63886594BULL
 #define S_U64_DIV_1E4 11
 #define MASK32 0xFFFFFFFFULL
-
-static const uint64_t MAGIC_DIV_1E8 = (M_U64_DIV_1E8);
 
 /*
  * Render exactly 8 decimal digits of dw, ending at offMaxx. Zero-pads. The
@@ -589,13 +589,13 @@ static int u128ToAscii(int digitPrintCount, uint64_t dw1, uint64_t dw0, char *as
     int ich = off + digitPrintCount;
     int remainingDigitCount = digitPrintCount;
     while (dw1T != 0) {
-        uint64_t q2 = mulhi64(dw1T, MAGIC_DIV_1E8) >> S_U64_DIV_1E8;
+        uint64_t q2 = mulhi64(dw1T, M_U64_DIV_1E8) >> S_U64_DIV_1E8;
         uint64_t r2 = dw1T - (q2 * 100000000ULL);
         uint64_t s2 = (r2 << 32) | (dw0T >> 32);
-        uint64_t q1 = mulhi64(s2, MAGIC_DIV_1E8) >> S_U64_DIV_1E8;
+        uint64_t q1 = mulhi64(s2, M_U64_DIV_1E8) >> S_U64_DIV_1E8;
         uint64_t r1 = s2 - (q1 * 100000000ULL);
         uint64_t s1 = (r1 << 32) | (dw0T & MASK32);
-        uint64_t q0 = mulhi64(s1, MAGIC_DIV_1E8) >> S_U64_DIV_1E8;
+        uint64_t q0 = mulhi64(s1, M_U64_DIV_1E8) >> S_U64_DIV_1E8;
         uint64_t r0 = s1 - (q0 * 100000000ULL);
         dw0T = (q1 << 32) + q0;
         dw1T = q2;
@@ -604,7 +604,7 @@ static int u128ToAscii(int digitPrintCount, uint64_t dw1, uint64_t dw0, char *as
         remainingDigitCount -= 8;
     }
     while (remainingDigitCount >= 8) {
-        uint64_t t0 = mulhi64(dw0T, MAGIC_DIV_1E8) >> S_U64_DIV_1E8;
+        uint64_t t0 = mulhi64(dw0T, M_U64_DIV_1E8) >> S_U64_DIV_1E8;
         uint64_t r0 = dw0T - (t0 * 100000000ULL);
         dw0T = t0;
         render8DigitsBeforeIndex(r0, ascii, ich);
