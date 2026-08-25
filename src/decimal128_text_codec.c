@@ -665,16 +665,16 @@ static int appendInt(char *out, int v) {
  * None of the optional leading characters live in the string data. The sign,
  * and the 's' that marks a signaling NaN, are each written unconditionally and
  * then overwritten by whatever follows when they are not wanted -- the trick
- * fnzToIntegerString already uses for the sign. That holds only because every
+ * fnzToIntegerAscii already uses for the sign. That holds only because every
  * optional character is a single byte at the front of the form: a spelling
  * that ever put one elsewhere would render wrong rather than fail to compile.
- * The one exception is written where it happens, in zerString's exponent form,
+ * The one exception is written where it happens, in zerAscii's exponent form,
  * where the byte is a TRAILING '+' overwritten by appendInt's own '-'.
  * ------------------------------------------------------------------------ */
 
 static const char INFINITY_TEXT[] = "Infinity";
 
-static int infString(char *out, bool sign) {
+static int infAscii(char *out, bool sign) {
     int signLen = sign ? 1 : 0;
     int totalLen = signLen + (int)sizeof(INFINITY_TEXT) - 1;
     demand(totalLen + 1 <= D128TEXT_MAX_LEN);
@@ -685,7 +685,7 @@ static int infString(char *out, bool sign) {
 
 static const char NAN_TEXT[] = "NaN";
 
-static int nanString(char *out, bool sign, bool isSignaling, uint64_t payloadHi, uint64_t payloadLo) {
+static int nanAscii(char *out, bool sign, bool isSignaling, uint64_t payloadHi, uint64_t payloadLo) {
     int signLen = sign ? 1 : 0;
     int sLen = isSignaling ? 1 : 0;
     int wordOff = signLen + sLen;
@@ -717,10 +717,10 @@ static int nanString(char *out, bool sign, bool isSignaling, uint64_t payloadHi,
  */
 static const char PLAIN_ZERO[] = "0.000000";
 
-/* The exponent form's base. The '+' is not here: see zerString below. */
+/* The exponent form's base. The '+' is not here: see zerAscii below. */
 static const char ZERO_EXP_TEXT[] = "0E";
 
-static int zerString(char *out, bool sign, int qExp) {
+static int zerAscii(char *out, bool sign, int qExp) {
     if (qExp <= 0 && qExp >= -6) {
         int k = -qExp;
         int zeroLen = (k == 0) ? 1 : k + 2;
@@ -755,7 +755,7 @@ static int zerString(char *out, bool sign, int qExp) {
 }
 
 /* qExp == 0: a plain integer, no radix point and no exponent. */
-static int fnzToIntegerString(char *out, bool sign, int digitLen, uint64_t dw1, uint64_t dw0) {
+static int fnzToIntegerAscii(char *out, bool sign, int digitLen, uint64_t dw1, uint64_t dw0) {
     verify(digitLen > 0);
     int signLen = sign ? 1 : 0;
     int totalLen = signLen + digitLen;
@@ -770,7 +770,7 @@ static int fnzToIntegerString(char *out, bool sign, int digitLen, uint64_t dw1, 
  * Fixed-point form: leading zeros, then the coefficient digits shifted right
  * by one position to make room for the radix point.
  */
-static int fnzToDecimalPointString(char *out, bool sign, int qExp, int digitLen, uint64_t dw1, uint64_t dw0) {
+static int fnzToDecimalPointAscii(char *out, bool sign, int qExp, int digitLen, uint64_t dw1, uint64_t dw0) {
     int digitsRightOfDecimal = -qExp;
     int leadingZeroCount = 1 + digitsRightOfDecimal - digitLen;
     if (leadingZeroCount < 0)
@@ -794,7 +794,7 @@ static int fnzToDecimalPointString(char *out, bool sign, int qExp, int digitLen,
  * Normalized scientific form. The exponent sign is always written, per the
  * GDAS to-scientific-string form: 1.234E+5, never 1.234E5.
  */
-static int fnzToNormalizedScientificString(char *out, bool sign, int qExp, int digitLen, uint64_t dw1, uint64_t dw0) {
+static int fnzToNormalizedScientificAscii(char *out, bool sign, int qExp, int digitLen, uint64_t dw1, uint64_t dw0) {
     verify(digitLen > 0);
     int eExp = qExp + (digitLen - 1);
     int eExpAbs = (eExp < 0) ? -eExp : eExp;
@@ -826,14 +826,14 @@ static int fnzToNormalizedScientificString(char *out, bool sign, int qExp, int d
  * fixed-point when the adjusted exponent is at least -6,
  * scientific otherwise -- the GDAS auto-select rule.
  */
-static int fnzString(char *out, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
+static int fnzAscii(char *out, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
     int digitLen = calcDigitLen128(dw1, dw0);
     int eExp = qExp + (digitLen - 1);
     if (qExp == 0)
-        return fnzToIntegerString(out, sign, digitLen, dw1, dw0);
+        return fnzToIntegerAscii(out, sign, digitLen, dw1, dw0);
     if (qExp <= 0 && eExp >= -6)
-        return fnzToDecimalPointString(out, sign, qExp, digitLen, dw1, dw0);
-    return fnzToNormalizedScientificString(out, sign, qExp, digitLen, dw1, dw0);
+        return fnzToDecimalPointAscii(out, sign, qExp, digitLen, dw1, dw0);
+    return fnzToNormalizedScientificAscii(out, sign, qExp, digitLen, dw1, dw0);
 }
 
 /* --------------------------------------------------------------------------
@@ -841,7 +841,7 @@ static int fnzString(char *out, bool sign, int qExp, uint64_t dw1, uint64_t dw0)
  * ------------------------------------------------------------------------ */
 
 /* Unpack a BID128 encoding, per IEEE 754-2019 3.5.2, and render it. */
-static int decodeBid128toString(char *out, uint64_t bid128Hi, uint64_t bid128Lo) {
+static int decodeBid128toAscii(char *out, uint64_t bid128Hi, uint64_t bid128Lo) {
     verify(1 + W5 + T_WIDTH == 128);
 
     bool sign = (bid128Hi & SIGN_BIT) != 0;
@@ -864,11 +864,11 @@ static int decodeBid128toString(char *out, uint64_t bid128Hi, uint64_t bid128Lo)
         qExp = biasedExponentE - BIAS;
         coeffHi = 8ULL + (uint64_t)(combination & 1);
     } else if ((combination >> (W5 - 5)) == 0x1E) {
-        return infString(out, sign);
+        return infAscii(out, sign);
     } else {
         verify((combination >> (W5 - 5)) == 0x1F);
         bool isSignaling = ((combination >> (W5 - 6)) & 1) != 0;
-        return nanString(out, sign, isSignaling, coeffTHi, bid128Lo);
+        return nanAscii(out, sign, isSignaling, coeffTHi, bid128Lo);
     }
 
     uint64_t dw1 = (coeffHi << (T_WIDTH - 64)) | coeffTHi;
@@ -879,12 +879,12 @@ static int decodeBid128toString(char *out, uint64_t bid128Hi, uint64_t bid128Lo)
     if ((dw1 | dw0) == 0 ||
         dw1 > MAXX_COEFF_34_HI ||
         (dw1 == MAXX_COEFF_34_HI && dw0 >= MAXX_COEFF_34_LO))
-        return zerString(out, sign, qExp);
-    return fnzString(out, sign, qExp, dw1, dw0);
+        return zerAscii(out, sign, qExp);
+    return fnzAscii(out, sign, qExp, dw1, dw0);
 }
 
 /* Unpack a DPD128 encoding and hand the pieces to the same renderers. */
-static int decodeDpd128toString(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo) {
+static int decodeDpd128toAscii(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo) {
     const int w = 12; /* exponent continuation width */
 
     bool sign = (dpd128Hi & SIGN_BIT) != 0;
@@ -908,7 +908,7 @@ static int decodeDpd128toString(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo)
         qExp = ((expMSB << w) | expContinuation) - BIAS;
         d0 = 8ULL + (uint64_t)((combination >> w) & 0x1);
     } else if ((combination >> (W5 - 5)) == 0x1E) {
-        return infString(out, sign);
+        return infAscii(out, sign);
     } else {
         verify((combination >> (W5 - 5)) == 0x1F);
         isNaN = true;
@@ -936,10 +936,10 @@ static int decodeDpd128toString(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo)
     }
 
     if (isNaN)
-        return nanString(out, sign, isSignaling, dw1, dw0);
+        return nanAscii(out, sign, isSignaling, dw1, dw0);
     if ((dw1 | dw0) == 0)
-        return zerString(out, sign, qExp);
-    return fnzString(out, sign, qExp, dw1, dw0);
+        return zerAscii(out, sign, qExp);
+    return fnzAscii(out, sign, qExp, dw1, dw0);
 }
 
 /* --------------------------------------------------------------------------
@@ -1520,14 +1520,14 @@ static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIs
  * The published surface
  * ------------------------------------------------------------------------ */
 
-int d128text_bid128ToString(char *out, uint64_t hi, uint64_t lo) {
+int d128text_bid128ToAscii(char *out, uint64_t hi, uint64_t lo) {
     demand(out != NULL);
-    return decodeBid128toString(out, hi, lo);
+    return decodeBid128toAscii(out, hi, lo);
 }
 
-int d128text_dpd128ToString(char *out, uint64_t hi, uint64_t lo) {
+int d128text_dpd128ToAscii(char *out, uint64_t hi, uint64_t lo) {
     demand(out != NULL);
-    return decodeDpd128toString(out, hi, lo);
+    return decodeDpd128toAscii(out, hi, lo);
 }
 
 static const char *parseInto(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *text) {

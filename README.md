@@ -17,8 +17,8 @@ For the complete decimal128 implementation see `decimal128-c` at
 #include "decimal128_text_codec.h"
 
 char out[D128TEXT_MAX_LEN];
-int len = d128text_bid128ToString(out, hi, lo);   /* cannot fail */
-int len = d128text_dpd128ToString(out, hi, lo);
+int len = d128text_bid128ToAscii(out, hi, lo);   /* cannot fail */
+int len = d128text_dpd128ToAscii(out, hi, lo);
 
 uint64_t hi, lo;
 const char *err = d128text_bid128Parse(&hi, &lo, "1.23E+45");   /* NULL = success */

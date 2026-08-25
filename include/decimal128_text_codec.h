@@ -29,7 +29,7 @@ extern "C" {
  */
 
 /*
- * The exact buffer size for the two ToString functions, NUL included, so a
+ * The exact buffer size for the two ToAscii functions, NUL included, so a
  * caller declares `char out[D128TEXT_MAX_LEN]` and is done.
  *
  * The text itself reaches 42. The widest scientific form -9.999...E-6143 is
@@ -69,8 +69,8 @@ extern "C" {
  * outputs from distinct encodings of the same numerical value -- and always
  * writes the exponent sign, as in "6.02E+23".
  */
-int d128text_bid128ToString(char *out, uint64_t hi, uint64_t lo);
-int d128text_dpd128ToString(char *out, uint64_t hi, uint64_t lo);
+int d128text_bid128ToAscii(char *out, uint64_t hi, uint64_t lo);
+int d128text_dpd128ToAscii(char *out, uint64_t hi, uint64_t lo);
 
 /*
  * Parse a decimal character sequence into a BID128 / DPD128 encoding.

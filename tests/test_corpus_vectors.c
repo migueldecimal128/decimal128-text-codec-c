@@ -211,8 +211,8 @@ static int runDecodeTable(const char *path, const char *label) {
         }
         char bidText[D128TEXT_MAX_LEN];
         char dpdText[D128TEXT_MAX_LEN];
-        int bidLen = d128text_bid128ToString(bidText, bidHi, bidLo);
-        int dpdLen = d128text_dpd128ToString(dpdText, dpdHi, dpdLo);
+        int bidLen = d128text_bid128ToAscii(bidText, bidHi, bidLo);
+        int dpdLen = d128text_dpd128ToAscii(dpdText, dpdHi, dpdLo);
         CHECK(strcmp(bidText, row.text) == 0, "%s row %d: bid %s rendered <%s>, want <%s>",
               label, rows, row.bidHex, bidText, row.text);
         CHECK(strcmp(dpdText, row.text) == 0, "%s row %d: dpd %s rendered <%s>, want <%s>",
