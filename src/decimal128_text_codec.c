@@ -1,23 +1,5 @@
 // SPDX-License-Identifier: MIT
 /*
- * decimal128-text-codec-c
- *
- * Ported from decimal128-text-codec-kotlin (Decimal128TextCodec.kt @ 55d5171),
- * which is the reference implementation for the family. The shape follows it
- * closely enough to be read side by side; where C differs, the differences are
- * noted at the point they occur. The three deliberate ones:
- *
- *  - dwords are `uint64_t`, not the reference's signed `Long`. The Kotlin
- *    carries unsignedMulHi / unsignedLT / ushr only because the JVM has no
- *    unsigned 64-bit type, and signed wrap would be undefined here anyway --
- *    a consumer compiles these sources with their own flags, so the codec
- *    cannot lean on -fwrapv the way the full port does.
- *  - the renderers write into a caller buffer and return a length, rather
- *    than allocating an exactly-sized array and returning a String.
- *  - the parse direction reads through a NUL-returning accessor that never
- *    steps past the terminator, which is how the Kotlin's getOrNul sentinel
- *    contract translates to a C string.
- *
  * Everything reachable from outside is the four functions in the header; the
  * rest is static.
  */
