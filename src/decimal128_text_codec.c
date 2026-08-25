@@ -1113,6 +1113,7 @@ static void finalizeSubnormal(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool
  * and the subnormal region. */
 static void finalizeUnderflowRegion(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign,
                                     int qExp, uint64_t dw1, uint64_t dw0, int residue) {
+    /* IEEE 754-2019 7.5 Underflow -- the subnormal region */
     verify(qExp < Q_MIN);
     int truncationNeeded = Q_MIN - qExp;
     int digitLen = calcDigitLen128(dw1, dw0);

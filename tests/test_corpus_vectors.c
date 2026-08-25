@@ -27,7 +27,8 @@
  * leading and trailing spaces, an embedded comma, an embedded quote and an
  * embedded backslash. A naive comma split silently corrupts four rows and
  * still passes, because a malformed input fails to parse either way -- which
- * is why the row counts below are asserted.
+ * is why the row counts below are asserted, and why runQuotedColumnTable
+ * checks for those four rows by hand.
  */
 
 #include <stdbool.h>
@@ -330,6 +331,36 @@ static int runErrorTable(const char *path) {
     return rows;
 }
 
+/*
+ * The reader itself. `parse` and `error` quote their text column, and the four
+ * rows below are exactly the ones a naive comma split corrupts while still
+ * passing -- a mangled malformed input fails to parse either way.
+ */
+static void runQuotedColumnTable(const char *path) {
+    FILE *f = openVectors(path);
+    Row row;
+    bool hasEmpty = false;
+    bool hasLeadingSpace = false;
+    bool hasTrailingSpace = false;
+    bool hasComma = false;
+    while (readRow(f, &row)) {
+        size_t n = strlen(row.text);
+        if (n == 0)
+            hasEmpty = true;
+        if (n > 0 && row.text[0] == ' ')
+            hasLeadingSpace = true;
+        if (n > 0 && row.text[n - 1] == ' ')
+            hasTrailingSpace = true;
+        if (strchr(row.text, ',') != NULL)
+            hasComma = true;
+    }
+    fclose(f);
+    CHECK(hasEmpty, "the empty-string row was lost");
+    CHECK(hasLeadingSpace, "a leading-space row was lost");
+    CHECK(hasTrailingSpace, "a trailing-space row was lost");
+    CHECK(hasComma, "an embedded-comma row was lost");
+}
+
 int main(int argc, char **argv) {
     int rows;
 
@@ -346,6 +377,8 @@ int main(int argc, char **argv) {
 
     rows = runErrorTable(VECTOR_DIR "/text_bid128_dpd128_error.csv.txt");
     CHECK(rows == 173, "the error file has %d rows, expected 173", rows);
+
+    runQuotedColumnTable(VECTOR_DIR "/text_bid128_dpd128_error.csv.txt");
 
     if (argc > 1) {
         rows = runDecodeTable(argv[1], "canonical");
