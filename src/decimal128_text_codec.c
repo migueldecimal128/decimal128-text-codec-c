@@ -18,7 +18,8 @@
 /* ---------------------------------------------------------------------------
  * Internal-state assertions
  *
- * Two mechanisms, and the split matters more in C than it does in Kotlin.
+ * Two mechanisms, and the split matters: one is a debugging aid, the other a
+ * memory-safety guard.
  *
  *   verify(cond)  internal-consistency claims -- unreachable for ANY input, so
  *                 a failure is a codec bug rather than bad data. Compiled out
@@ -28,8 +29,7 @@
  *                 control. The test build arms it with -DVERIFY_ENABLED=1.
  *
  *   demand(cond)  buffer-sizing preconditions, which guard a write into the
- *                 caller's buffer. In Kotlin the equivalent violation throws
- *                 IndexOutOfBounds; here it would be a buffer overrun, so
+ *                 caller's buffer. A violation here is a buffer overrun, so
  *                 these stay live in every configuration.
  * ------------------------------------------------------------------------ */
 
@@ -127,7 +127,7 @@ static inline uint64_t mulhi64(uint64_t x, uint64_t y) {
 #endif
 }
 
-/* Leading zero count, 64 for zero -- matching Kotlin's countLeadingZeroBits. */
+/* Leading zero count, 64 for zero. */
 static inline int clz64(uint64_t v) {
     if (v == 0)
         return 64;
@@ -347,7 +347,7 @@ static int u128ScaleDownPow10(uint64_t *outHi, uint64_t *outLo, uint64_t dw1, ui
  * binary integer, DPD as a leading digit plus eleven declets.
  *
  * Both directions are pure boolean arithmetic (Cowlishaw's dpd2bcd and
- * bcd2dpd) rather than lookup tables, matching the reference.
+ * bcd2dpd) rather than lookup tables.
  * ------------------------------------------------------------------------ */
 
 /* Decode a 10-bit declet (bits p q r s t u v w x y) into 0..999. Accepts the
@@ -458,7 +458,7 @@ static uint64_t binFromDeclets(uint64_t declets) {
     while (rest != 0) {
         bin += dpdDecodeDeclet(rest & 0x3FF) * multiplier;
         /* The last iteration multiplies past 10^18 and the product is never
-         * used, since `rest` is zero by then. The reference wraps here too. */
+         * used, since `rest` is zero by then, so it is let wrap. */
         multiplier *= 1000;
         rest >>= 10;
     }
@@ -616,8 +616,7 @@ static int u128ToAscii(int digitPrintCount, uint64_t dw1, uint64_t dw0, char *as
     return digitPrintCount;
 }
 
-/* Write a signed decimal integer; returns the number of characters written.
- * Replaces the reference's Int.toString in the zero renderer. */
+/* Write a signed decimal integer; returns the number of characters written. */
 static int appendInt(char *out, int v) {
     char tmp[12];
     int n = 0;
@@ -1185,9 +1184,8 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
      * because falling through would encode an out-of-range coefficient
      * silently. It cannot fire on a consumer's data -- no input reaches it --
      * only on a future caller that breaks the invariant, which is exactly when
-     * a loud failure is what you want. A port that parses differently, or a
-     * caller that is not a parser, needs the truncation step back; it is in
-     * the reference implementation and in every full port's Finalize.
+     * a loud failure is what you want. A caller that is not a parser, or one
+     * that parses differently, needs the truncation step back.
      */
     demand(calcDigitLen128(dw1In, dw0In) <= 34);
 
@@ -1235,16 +1233,27 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
  * ------------------------------------------------------------------------ */
 
 /*
- * Read the character at *pos and advance, except at the terminator, where it
- * stays put and keeps returning NUL. This is how the reference's getOrNul
- * sentinel -- which reads NUL forever past the end of a Kotlin String --
- * translates without ever stepping past a C string's terminator.
+ * The code of the character at [index], or -1 at end of input.
+ *
+ * The parsers walk the input as character codes, so end-of-input is one more
+ * code value rather than a bound test at every read. The NUL that the other
+ * ports reject as an ordinary invalid character cannot reach this one: a C
+ * string has no way to carry an embedded NUL in the first place.
+ *
+ * A string that carries its own length can bound-test the index and is safe
+ * for any index whatever. Here the
+ * terminator IS the length, so the end can only be found by reading the byte,
+ * and reading at one past the terminator would be out of bounds. That is safe
+ * because -1 matches no character the parsers test for: every read that could
+ * return it is followed by a comparison it fails, so control reaches a return
+ * or leaves its loop before the next read. The `||` short-circuit in the NaN
+ * letter chain is part of that guarantee, as is the `ch != ')'` test before
+ * the read that follows a payload's closing paren. Keep it that way -- a read
+ * issued after a -1 would step off the end of the string.
  */
-static inline int chAt(const char *str, size_t *pos) {
-    int c = (unsigned char)str[*pos];
-    if (c != 0)
-        ++*pos;
-    return c;
+static inline int codeAt(const char *str, size_t index) {
+    int c = (unsigned char)str[index];
+    return (c == 0) ? -1 : c;
 }
 
 /*
@@ -1270,7 +1279,7 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
     bool prevWasDigit = false;
     bool afterUnderscore = false;
 
-    verify(chFirst != 0);
+    verify(chFirst != -1);
     int ch = chFirst;
     int fractionalDigitCount = 0;
     uint64_t accum19a = 0;
@@ -1308,7 +1317,7 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
             hasDot = true;
             prevWasDigit = false;
         }
-        ch = chAt(str, &pos);
+        ch = codeAt(str, pos++);
     }
     if (afterUnderscore)
         return "invalid underscore location";
@@ -1316,10 +1325,10 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
         return "no coefficient digit";
     /* this path has at least one digit */
     if (ch == 'E' || ch == 'e') {
-        ch = chAt(str, &pos);
+        ch = codeAt(str, pos++);
         if (ch == '+' || ch == '-') {
             expSign = (ch == '-');
-            ch = chAt(str, &pos);
+            ch = codeAt(str, pos++);
         }
         bool hasExpDigit = false;
         int expSignificantDigitCount = 0;
@@ -1340,7 +1349,7 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
                 prevWasDigit = true;
                 afterUnderscore = false;
             }
-            ch = chAt(str, &pos);
+            ch = codeAt(str, pos++);
         }
         if (afterUnderscore)
             return "invalid underscore location";
@@ -1350,7 +1359,7 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
         if (expSignificantDigitCount > 4)
             exp = 9999;
     }
-    if (ch != 0)
+    if (ch != -1)
         return "unexpected char";
 
     uint64_t dw0 = accum19a;
@@ -1382,14 +1391,14 @@ static const char *parseInfinityText(uint64_t *hi, uint64_t *lo, bool sign,
     for (int i = 0; i < 8; ++i) {
         int targetCode = (unsigned char)target[i];
         if ((ch | 0x20) != targetCode) {
-            if (ch == 0)
+            if (ch == -1)
                 break;
             return "failure parsing infinity";
         }
         chPrevCode = ch | 0x20;
-        ch = chAt(str, &pos);
+        ch = codeAt(str, pos++);
     }
-    if (ch != 0 || (chPrevCode != 'f' && chPrevCode != 'y'))
+    if (ch != -1 || (chPrevCode != 'f' && chPrevCode != 'y'))
         return "failure parsing Infinity";
     *hi = INF_PATTERN_HI | (sign ? SIGN_BIT : 0);
     *lo = 0;
@@ -1407,8 +1416,7 @@ static const char *parseInfinityText(uint64_t *hi, uint64_t *lo, bool sign,
  * must be the last character of the input. So NaN(1)2(3), NaN(1, NaN(1] and
  * NaN() are all rejected, and NaN[1] and NaN{1} are not this form at all.
  *
- * The full decimal128 ports accept the same spelling; the codecs had it first,
- * and the ports took it on 2026-08-23. The reason it exists at all is that C's
+ * The reason this spelling exists at all is that C's
  * own strtod reads NAN(n-char-sequence), so
  * the spelling reaches a C caller from the platform itself. The resemblance
  * stops at the parentheses -- strtod's sequence is letters, digits and
@@ -1423,19 +1431,19 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
     bool hasS = (ch | 0x20) == 's';
     bool hasQ = (ch | 0x20) == 'q';
     if (hasQ || hasS)
-        ch = chAt(str, &pos);
+        ch = codeAt(str, pos++);
     if (((ch | 0x20) != 'n') ||
-        ((chAt(str, &pos) | 0x20) != 'a') ||
-        ((chAt(str, &pos) | 0x20) != 'n'))
+        ((codeAt(str, pos++) | 0x20) != 'a') ||
+        ((codeAt(str, pos++) | 0x20) != 'n'))
         return "failure parsing NaN";
 
     uint64_t payloadDw0 = 0;
     uint64_t payloadDw1 = 0;
-    ch = chAt(str, &pos);
+    ch = codeAt(str, pos++);
     bool hasParen = (ch == '(');
     if (hasParen)
-        ch = chAt(str, &pos);
-    if (hasParen || ch != 0) {
+        ch = codeAt(str, pos++);
+    if (hasParen || ch != -1) {
         int accumDigitCount = 0;
         uint64_t accum19a = 0;
         uint64_t accum19b = 0;
@@ -1452,17 +1460,17 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
                 accum19a = (accum19a * 10) + (uint64_t)d;
             else
                 accum19b = (accum19b * 10) + (uint64_t)d;
-            ch = chAt(str, &pos);
+            ch = codeAt(str, pos++);
         }
         if (accumDigitCount == 0)
             return hasParen ? "failure parsing NaN" : "non-digit NaN payload character";
         if (hasParen) {
             /* the ')' must be present and must end the input */
             if (ch != ')')
-                return (ch == 0) ? "failure parsing NaN" : "non-digit NaN payload character";
-            if (chAt(str, &pos) != 0)
+                return (ch == -1) ? "failure parsing NaN" : "non-digit NaN payload character";
+            if (codeAt(str, pos++) != -1)
                 return "failure parsing NaN";
-        } else if (ch != 0) {
+        } else if (ch != -1) {
             return "non-digit NaN payload character";
         }
         if (accumDigitCount > 33) {
@@ -1482,11 +1490,11 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
 /* Read the optional sign, then dispatch on the leading character. */
 static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *str) {
     size_t pos = 0;
-    int chFirst = chAt(str, &pos);
+    int chFirst = codeAt(str, pos++);
     int ch = chFirst;
     bool sign = (ch == '-');
     if (ch == '+' || ch == '-')
-        ch = chAt(str, &pos);
+        ch = codeAt(str, pos++);
     if ((ch >= '0' && ch <= '9') || ch == '.')
         return parseFiniteValueText(hi, lo, formatIsBid, sign, ch, str, pos);
     int chLower = ch | 0x20;
@@ -1494,7 +1502,7 @@ static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIs
         return parseInfinityText(hi, lo, sign, ch, str, pos);
     if (chLower == 'n' || chLower == 's' || chLower == 'q')
         return parseNanText(hi, lo, formatIsBid, sign, ch, str, pos);
-    if (chFirst == 0)
+    if (chFirst == -1)
         return "empty string";
     return "invalid format";
 }

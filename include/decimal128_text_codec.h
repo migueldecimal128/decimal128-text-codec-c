@@ -69,7 +69,7 @@ extern "C" {
  *
  * All functions are pure and safe for concurrent use.
  *
- * In this port
+ * This implementation
  *
  * Nothing here allocates. The renderers write a NUL-terminated string into a
  * caller buffer of D128TEXT_MAX_LEN bytes and return its length; the parsers
@@ -96,9 +96,8 @@ extern "C" {
  * with slack, an error in the arithmetic above would quietly consume the slack
  * instead of firing.
  *
- * This constant is 43: the 42 bytes of text plus the NUL that the C renderers
- * write. The other ports spell the same bound 42 and write no terminator,
- * handing back a length or a view instead.
+ * This constant is 43: the 42 bytes of text plus the NUL that the renderers
+ * write.
  */
 #define D128TEXT_MAX_LEN 43
 
