@@ -1393,7 +1393,7 @@ static const char *parseInfinityText(uint64_t *hi, uint64_t *lo, bool sign,
         if ((ch | 0x20) != targetCode) {
             if (ch == -1)
                 break;
-            return "failure parsing infinity";
+            return "failure parsing Infinity";
         }
         chPrevCode = ch | 0x20;
         ch = codeAt(str, pos++);
