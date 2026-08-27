@@ -320,6 +320,9 @@ static int runErrorTable(const char *path) {
         if (bErr != NULL && dErr != NULL)
             CHECK(strcmp(bErr, dErr) == 0, "error row %d: the formats disagree on <%s>: %s vs %s",
                   rows, row.text, bErr, dErr);
+        if (bErr != NULL)
+            CHECK(strcmp(bErr, row.status) == 0,
+                  "error row %d: <%s> returned %s, corpus says %s", rows, row.text, bErr, row.status);
         uint64_t wantHi, wantLo;
         parseHex32(row.bidHex, &wantHi, &wantLo);
         CHECK(bHi == wantHi && bLo == wantLo, "error row %d: bid <%s> left %016llX%016llX",

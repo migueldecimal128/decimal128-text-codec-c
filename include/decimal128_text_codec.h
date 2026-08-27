@@ -164,8 +164,12 @@ int d128text_dpd128ToAscii(char *out, uint64_t hi, uint64_t lo);
  * Returns NULL on success, with the encoding written to *hi and *lo. On
  * failure returns a human-readable message and writes the canonical positive
  * quiet NaN, so a caller who ignores the return value still observes a legal
- * IEEE 754-2019 datum rather than stale memory. The exact wording of the
- * message is not part of the contract and may change between versions.
+ * IEEE 754-2019 datum rather than stale memory. The message is the engine's
+ * ParseStatus name for the failure -- EMPTY_STRING, INVALID_FORMAT,
+ * UNEXPECTED_CHAR, DOUBLE_DOT, NO_COEFFICIENT_DIGIT, NO_EXPONENT_DIGIT,
+ * INVALID_UNDERSCORE_LOCATION, FAILURE_PARSING_INFINITY or
+ * FAILURE_PARSING_NAN -- and the conformance suite asserts it against the
+ * shared corpus, so it is part of the contract.
  *
  * Accepted input:
  *
@@ -206,8 +210,12 @@ const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *text);
  * Returns NULL on success, with the encoding written to *hi and *lo. On
  * failure returns a human-readable message and writes the canonical positive
  * quiet NaN, so a caller who ignores the return value still observes a legal
- * IEEE 754-2019 datum rather than stale memory. The exact wording of the
- * message is not part of the contract and may change between versions.
+ * IEEE 754-2019 datum rather than stale memory. The message is the engine's
+ * ParseStatus name for the failure -- EMPTY_STRING, INVALID_FORMAT,
+ * UNEXPECTED_CHAR, DOUBLE_DOT, NO_COEFFICIENT_DIGIT, NO_EXPONENT_DIGIT,
+ * INVALID_UNDERSCORE_LOCATION, FAILURE_PARSING_INFINITY or
+ * FAILURE_PARSING_NAN -- and the conformance suite asserts it against the
+ * shared corpus, so it is part of the contract.
  *
  * Accepted input:
  *

@@ -1306,23 +1306,23 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
             afterUnderscore = false;
         } else if (ch == '_') {
             if (!prevWasDigit)
-                return "invalid underscore location";
+                return "INVALID_UNDERSCORE_LOCATION";
             prevWasDigit = false;
             afterUnderscore = true;
         } else { /* '.' */
             if (afterUnderscore)
-                return "invalid underscore location";
+                return "INVALID_UNDERSCORE_LOCATION";
             if (hasDot)
-                return "double radix dot";
+                return "DOUBLE_DOT";
             hasDot = true;
             prevWasDigit = false;
         }
         ch = codeAt(str, pos++);
     }
     if (afterUnderscore)
-        return "invalid underscore location";
+        return "INVALID_UNDERSCORE_LOCATION";
     if (!hasCoefficientDigit)
-        return "no coefficient digit";
+        return "NO_COEFFICIENT_DIGIT";
     /* this path has at least one digit */
     if (ch == 'E' || ch == 'e') {
         ch = codeAt(str, pos++);
@@ -1337,7 +1337,7 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
         while ((ch >= '0' && ch <= '9') || ch == '_') {
             if (ch == '_') {
                 if (!prevWasDigit)
-                    return "invalid underscore location";
+                    return "INVALID_UNDERSCORE_LOCATION";
                 prevWasDigit = false;
                 afterUnderscore = true;
             } else {
@@ -1352,15 +1352,15 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
             ch = codeAt(str, pos++);
         }
         if (afterUnderscore)
-            return "invalid underscore location";
+            return "INVALID_UNDERSCORE_LOCATION";
         if (!hasExpDigit)
-            return "no exponent digit";
+            return "NO_EXPONENT_DIGIT";
         /* clamp once after the loop */
         if (expSignificantDigitCount > 4)
             exp = 9999;
     }
     if (ch != -1)
-        return "unexpected char";
+        return "UNEXPECTED_CHAR";
 
     uint64_t dw0 = accum19a;
     uint64_t dw1 = 0;
@@ -1393,13 +1393,13 @@ static const char *parseInfinityText(uint64_t *hi, uint64_t *lo, bool sign,
         if ((ch | 0x20) != targetCode) {
             if (ch == -1)
                 break;
-            return "failure parsing Infinity";
+            return "FAILURE_PARSING_INFINITY";
         }
         chPrevCode = ch | 0x20;
         ch = codeAt(str, pos++);
     }
     if (ch != -1 || (chPrevCode != 'f' && chPrevCode != 'y'))
-        return "failure parsing Infinity";
+        return "FAILURE_PARSING_INFINITY";
     *hi = INF_PATTERN_HI | (sign ? SIGN_BIT : 0);
     *lo = 0;
     return NULL;
@@ -1435,7 +1435,7 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
     if (((ch | 0x20) != 'n') ||
         ((codeAt(str, pos++) | 0x20) != 'a') ||
         ((codeAt(str, pos++) | 0x20) != 'n'))
-        return "failure parsing NaN";
+        return "FAILURE_PARSING_NAN";
 
     uint64_t payloadDw0 = 0;
     uint64_t payloadDw1 = 0;
@@ -1463,15 +1463,15 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
             ch = codeAt(str, pos++);
         }
         if (accumDigitCount == 0)
-            return hasParen ? "failure parsing NaN" : "non-digit NaN payload character";
+            return hasParen ? "FAILURE_PARSING_NAN" : "FAILURE_PARSING_NAN";
         if (hasParen) {
             /* the ')' must be present and must end the input */
             if (ch != ')')
-                return (ch == -1) ? "failure parsing NaN" : "non-digit NaN payload character";
+                return (ch == -1) ? "FAILURE_PARSING_NAN" : "FAILURE_PARSING_NAN";
             if (codeAt(str, pos++) != -1)
-                return "failure parsing NaN";
+                return "FAILURE_PARSING_NAN";
         } else if (ch != -1) {
-            return "non-digit NaN payload character";
+            return "FAILURE_PARSING_NAN";
         }
         if (accumDigitCount > 33) {
             payloadDw0 = 0;
@@ -1503,8 +1503,8 @@ static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIs
     if (chLower == 'n' || chLower == 's' || chLower == 'q')
         return parseNanText(hi, lo, formatIsBid, sign, ch, str, pos);
     if (chFirst == -1)
-        return "empty string";
-    return "invalid format";
+        return "EMPTY_STRING";
+    return "INVALID_FORMAT";
 }
 
 /* --------------------------------------------------------------------------
