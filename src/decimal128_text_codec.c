@@ -1236,9 +1236,9 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
  * The code of the character at [index], or -1 at end of input.
  *
  * The parsers walk the input as character codes, so end-of-input is one more
- * code value rather than a bound test at every read. The NUL that the other
- * ports reject as an ordinary invalid character cannot reach this one: a C
- * string has no way to carry an embedded NUL in the first place.
+ * code value rather than a bound test at every read. Nothing is given up by
+ * spending the NUL on that marker: a C string has no way to carry an embedded
+ * NUL in the first place, so one can never arrive as input data.
  *
  * A string that carries its own length can bound-test the index and is safe
  * for any index whatever. Here the
