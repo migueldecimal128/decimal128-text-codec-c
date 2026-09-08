@@ -882,7 +882,7 @@ static int fnzToNormalizedScientificAscii(char *out, bool sign, int qExp, int di
 
 /*
  * Finite non-zero: pick the form. Integer when the quantum exponent is zero,
- * fixed-point when the adjusted exponent is at least -6,
+ * fixed-point when it is negative and the adjusted exponent is at least -6,
  * scientific otherwise -- the GDAS auto-select rule.
  */
 static int fnzAscii(char *out, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
