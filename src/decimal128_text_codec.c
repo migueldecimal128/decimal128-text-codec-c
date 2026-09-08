@@ -1551,11 +1551,11 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
             ch = codeAt(str, pos++);
         }
         if (accumDigitCount == 0)
-            return hasParen ? "FAILURE_PARSING_NAN" : "FAILURE_PARSING_NAN";
+            return "FAILURE_PARSING_NAN";
         if (hasParen) {
             /* the ')' must be present and must end the input */
             if (ch != ')')
-                return (ch == -1) ? "FAILURE_PARSING_NAN" : "FAILURE_PARSING_NAN";
+                return "FAILURE_PARSING_NAN";
             if (codeAt(str, pos++) != -1)
                 return "FAILURE_PARSING_NAN";
         } else if (ch != -1) {
