@@ -45,7 +45,7 @@
 #define CODEC_NORETURN _Noreturn
 #endif
 
-CODEC_NORETURN static void codecAbort(const char *what) {
+CODEC_NORETURN static void impossible(const char *what) {
     fputs("decimal128-text-codec: impossible state: ", stderr);
     fputs(what, stderr);
     fputc('\n', stderr);
@@ -55,7 +55,7 @@ CODEC_NORETURN static void codecAbort(const char *what) {
 #define demand(cond)                     \
     do {                                 \
         if (!(cond))                     \
-            codecAbort(#cond);           \
+            impossible(#cond);           \
     } while (0)
 
 #if VERIFY_ENABLED
@@ -1256,6 +1256,12 @@ static inline int codeAt(const char *str, size_t index) {
     return (c == 0) ? -1 : c;
 }
 
+/* The digit test, spelled out once. <ctype.h> isdigit() is locale-dependent and
+ * takes an unsigned char or EOF, neither of which is what the reader yields. */
+static inline bool isDigit(int ch) {
+    return ch >= '0' && ch <= '9';
+}
+
 /*
  * Parse a finite numeral: optional radix point, optional E exponent, any
  * number of digits.
@@ -1286,8 +1292,8 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
     uint64_t accum19b = 0;
     int exp = 0;
 
-    while ((ch >= '0' && ch <= '9') || ch == '.' || ch == '_') {
-        if (ch >= '0' && ch <= '9') {
+    while (isDigit(ch) || ch == '.' || ch == '_') {
+        if (isDigit(ch)) {
             int d = ch - '0';
             hasCoefficientDigit = true;
             /* count while flushing leading zeros */
@@ -1334,7 +1340,7 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
         int expSignificantDigitCount = 0;
         prevWasDigit = false;
         afterUnderscore = false;
-        while ((ch >= '0' && ch <= '9') || ch == '_') {
+        while (isDigit(ch) || ch == '_') {
             if (ch == '_') {
                 if (!prevWasDigit)
                     return "INVALID_UNDERSCORE_LOCATION";
@@ -1447,7 +1453,7 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
         int accumDigitCount = 0;
         uint64_t accum19a = 0;
         uint64_t accum19b = 0;
-        while (ch >= '0' && ch <= '9') {
+        while (isDigit(ch)) {
             int d = ch - '0';
             /* Count every digit written, leading zeros included. The
              * 33-digit limit is a limit on the payload as spelled, not on
@@ -1495,7 +1501,7 @@ static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIs
     bool sign = (ch == '-');
     if (ch == '+' || ch == '-')
         ch = codeAt(str, pos++);
-    if ((ch >= '0' && ch <= '9') || ch == '.')
+    if (isDigit(ch) || ch == '.')
         return parseFiniteValueText(hi, lo, formatIsBid, sign, ch, str, pos);
     int chLower = ch | 0x20;
     if (chLower == 'i')
