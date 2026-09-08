@@ -64,86 +64,96 @@ CODEC_NORETURN static void impossible(const char *what) {
 #define verify(cond) ((void)0)
 #endif
 
+
+/* --------------------------------------------------------------------------
+ * Public constants
+ * ---------------------------------------------------------------------- */
+
+#define QNAN_PATTERN_HI 0x7C00000000000000ULL
+
+
+/* --------------------------------------------------------------------------
+ * The published surface
+ * ---------------------------------------------------------------------- */
+
+/* Defined below, among the helpers. The published surface sits above the
+ * machinery, so these four are declared here and defined in dependency order
+ * further down. */
+static int decodeBid128toAscii(char *out, uint64_t bid128Hi, uint64_t bid128Lo);
+static int decodeDpd128toAscii(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo);
+static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *str);
+static const char *parseInto(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *text);
+
+int d128text_bid128ToAscii(char *out, uint64_t hi, uint64_t lo) {
+    demand(out != NULL);
+    return decodeBid128toAscii(out, hi, lo);
+}
+
+int d128text_dpd128ToAscii(char *out, uint64_t hi, uint64_t lo) {
+    demand(out != NULL);
+    return decodeDpd128toAscii(out, hi, lo);
+}
+
+const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *text) {
+    return parseInto(hi, lo, true, text);
+}
+
+const char *d128text_dpd128Parse(uint64_t *hi, uint64_t *lo, const char *text) {
+    return parseInto(hi, lo, false, text);
+}
+
+static const char *parseInto(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *text) {
+    demand(hi != NULL && lo != NULL && text != NULL);
+    const char *errorStr = encodeStringOrError(hi, lo, formatIsBid, text);
+    if (errorStr != NULL) {
+        /* Always write the out-params, so a caller who discards the return
+         * value still observes a legal datum. The canonical positive quiet NaN
+         * is the same bit pattern in both formats. */
+        *hi = QNAN_PATTERN_HI;
+        *lo = 0;
+    }
+    return errorStr;
+}
+
+
 /* --------------------------------------------------------------------------
  * Format constants -- IEEE 754-2019 Table 3.6, decimal128
- * ------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------- */
 
 #define BIAS 6176
+
 #define Q_MIN (-6176) /* the minimum quantum exponent */
+
 #define Q_MAX 6111    /* the maximum quantum exponent */
+
 #define T_WIDTH 110   /* trailing significand field width in bits */
+
 #define W5 17         /* combination field width in bits */
 
 /* 10^34, one past the largest coefficient; maxx = max eXclusive */
 #define MAXX_COEFF_34_HI 0x0001ED09BEAD87C0ULL
+
 #define MAXX_COEFF_34_LO 0x378D8E6400000000ULL
 
 /* 10^33, the smallest 34-digit coefficient */
 #define MIN_PRECISION_34_COEFF_HI 0x0000314DC6448D93ULL
+
 #define MIN_PRECISION_34_COEFF_LO 0x38C15B0A00000000ULL
 
 /* 33 nines -- the largest canonical NaN payload */
 #define MAX_PAYLOAD_HI MIN_PRECISION_34_COEFF_HI
+
 #define MAX_PAYLOAD_LO (MIN_PRECISION_34_COEFF_LO - 1ULL)
 
 #define SIGN_BIT 0x8000000000000000ULL
+
 #define INF_PATTERN_HI 0x7800000000000000ULL
-#define QNAN_PATTERN_HI 0x7C00000000000000ULL
+
 #define SNAN_PATTERN_HI 0x7E00000000000000ULL
 
 #define TEN_POW_15 1000000000000000ULL
+
 #define TEN_POW_18 1000000000000000000ULL
-
-/* --------------------------------------------------------------------------
- * Low-level unsigned arithmetic
- * ------------------------------------------------------------------------ */
-
-/*
- * High 64 bits of the 128-bit product x * y. The portable branch is the
- * reference's four-partial-product decomposition, which is also the MSVC
- * synthesize-from-limbs path on targets without __umulh.
- */
-static inline uint64_t mulhi64(uint64_t x, uint64_t y) {
-#if defined(__SIZEOF_INT128__) && !defined(D128TEXT_NO_INT128)
-    return (uint64_t)(((unsigned __int128)x * (unsigned __int128)y) >> 64);
-#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_ARM64))
-    return __umulh(x, y);
-#else
-    uint64_t xLo = x & 0xFFFFFFFFULL;
-    uint64_t xHi = x >> 32;
-    uint64_t yLo = y & 0xFFFFFFFFULL;
-    uint64_t yHi = y >> 32;
-
-    uint64_t pp00 = xLo * yLo;
-    uint64_t pp01 = xHi * yLo;
-    uint64_t pp10 = xLo * yHi;
-    uint64_t pp11 = xHi * yHi;
-
-    uint64_t mid = pp01 + pp10; /* may wrap */
-    uint64_t midCarryShifted = (mid < pp01) ? (1ULL << 32) : 0ULL;
-    uint64_t midWithLo = (pp00 >> 32) + (mid & 0xFFFFFFFFULL);
-
-    return pp11 + (mid >> 32) + midCarryShifted + (midWithLo >> 32);
-#endif
-}
-
-/* Leading zero count, 64 for zero. */
-static inline int clz64(uint64_t v) {
-    if (v == 0)
-        return 64;
-#if defined(__GNUC__) || defined(__clang__)
-    return __builtin_clzll(v);
-#else
-    int n = 0;
-    if ((v >> 32) == 0) { n += 32; v <<= 32; }
-    if ((v >> 48) == 0) { n += 16; v <<= 16; }
-    if ((v >> 56) == 0) { n += 8; v <<= 8; }
-    if ((v >> 60) == 0) { n += 4; v <<= 4; }
-    if ((v >> 62) == 0) { n += 2; v <<= 2; }
-    if ((v >> 63) == 0) { n += 1; }
-    return n;
-#endif
-}
 
 /*
  * Powers of 10 from 10^0 through 10^34 as 128-bit values in little-endian
@@ -193,6 +203,105 @@ static const uint64_t POW10[(34 + 1) * 2] = {
     0x378D8E6400000000ULL, 0x0001ED09BEAD87C0ULL, /* 10^34 */
 };
 
+#define EXACT 0
+
+#define LT_HALF 1
+
+#define HALF 2
+
+#define GT_HALF 3
+
+/* Two bits per digit 0..9: 0 -> EXACT, 1..4 -> LT_HALF, 5 -> HALF, 6..9 -> GT_HALF */
+#define DIGIT_MAP 0xFF954ULL
+
+/*
+ * Reciprocal-multiplication constants. The 64-bit ones fold in the 64-bit
+ * shift that mulhi64 already performs, so the named shift is the remainder.
+ */
+#define M_U64_DIV_1E8 (0x8000000000000000ULL | 0x2BCC77118461CEFDULL)
+
+#define S_U64_DIV_1E8 26
+
+#define M_U32_DIV_1E1 0xCCCCCCCDULL
+
+#define S_U32_DIV_1E1 35
+
+#define M_U32_DIV_1E2 0x51EB851FULL
+
+#define S_U32_DIV_1E2 37
+
+#define M_U64_DIV_1E4 0x346DC5D63886594BULL
+
+#define S_U64_DIV_1E4 11
+
+#define MASK32 0xFFFFFFFFULL
+
+static const char INFINITY_TEXT[] = "Infinity";
+
+static const char NAN_TEXT[] = "NaN";
+
+/*
+ * Every plain-form zero is a prefix of this literal. k = -qExp is the count of
+ * zeros after the radix point, so k = 0 renders "0" with no radix point at all
+ * and k >= 1 renders "0." followed by k zeros -- lengths 1 and k + 2.
+ */
+static const char PLAIN_ZERO[] = "0.000000";
+
+/* The exponent form's base. The '+' is not here: see zerAscii below. */
+static const char ZERO_EXP_TEXT[] = "0E";
+
+
+/* --------------------------------------------------------------------------
+ * Low-level unsigned arithmetic
+ * ---------------------------------------------------------------------- */
+
+/*
+ * High 64 bits of the 128-bit product x * y. The portable branch is the
+ * reference's four-partial-product decomposition, which is also the MSVC
+ * synthesize-from-limbs path on targets without __umulh.
+ */
+static inline uint64_t mulhi64(uint64_t x, uint64_t y) {
+#if defined(__SIZEOF_INT128__) && !defined(D128TEXT_NO_INT128)
+    return (uint64_t)(((unsigned __int128)x * (unsigned __int128)y) >> 64);
+#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_ARM64))
+    return __umulh(x, y);
+#else
+    uint64_t xLo = x & 0xFFFFFFFFULL;
+    uint64_t xHi = x >> 32;
+    uint64_t yLo = y & 0xFFFFFFFFULL;
+    uint64_t yHi = y >> 32;
+
+    uint64_t pp00 = xLo * yLo;
+    uint64_t pp01 = xHi * yLo;
+    uint64_t pp10 = xLo * yHi;
+    uint64_t pp11 = xHi * yHi;
+
+    uint64_t mid = pp01 + pp10; /* may wrap */
+    uint64_t midCarryShifted = (mid < pp01) ? (1ULL << 32) : 0ULL;
+    uint64_t midWithLo = (pp00 >> 32) + (mid & 0xFFFFFFFFULL);
+
+    return pp11 + (mid >> 32) + midCarryShifted + (midWithLo >> 32);
+#endif
+}
+
+/* Leading zero count, 64 for zero. */
+static inline int clz64(uint64_t v) {
+    if (v == 0)
+        return 64;
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_clzll(v);
+#else
+    int n = 0;
+    if ((v >> 32) == 0) { n += 32; v <<= 32; }
+    if ((v >> 48) == 0) { n += 16; v <<= 16; }
+    if ((v >> 56) == 0) { n += 8; v <<= 8; }
+    if ((v >> 60) == 0) { n += 4; v <<= 4; }
+    if ((v >> 62) == 0) { n += 2; v <<= 2; }
+    if ((v >> 63) == 0) { n += 1; }
+    return n;
+#endif
+}
+
 /* Bit length of a 128-bit value: highest set bit plus one, 0 for zero. */
 static inline int calcBitLen128(uint64_t dw1, uint64_t dw0) {
     if (dw1 != 0)
@@ -234,9 +343,10 @@ static inline void u128FmaPow10(uint64_t *outHi, uint64_t *outLo, uint64_t x, in
     *outLo = sumLo;
 }
 
+
 /* --------------------------------------------------------------------------
  * The divide kernel
- * ------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------- */
 
 /*
  * Divide a 113-bit value by 10^pow10 for pow10 in 1..9, returning the
@@ -273,17 +383,10 @@ static uint64_t u113DivModPow10Max9(uint64_t *qHi, uint64_t *qLo, uint64_t dwHi,
     return (r0 << pow10) | b;
 }
 
+
 /* --------------------------------------------------------------------------
  * Residue -- how much was discarded, relative to half a ulp
- * ------------------------------------------------------------------------ */
-
-#define EXACT 0
-#define LT_HALF 1
-#define HALF 2
-#define GT_HALF 3
-
-/* Two bits per digit 0..9: 0 -> EXACT, 1..4 -> LT_HALF, 5 -> HALF, 6..9 -> GT_HALF */
-#define DIGIT_MAP 0xFF954ULL
+ * ---------------------------------------------------------------------- */
 
 static inline int residueFromDecimalDigit(int digit) {
     return (int)((DIGIT_MAP >> (digit << 1)) & 0x03ULL);
@@ -338,6 +441,7 @@ static int u128ScaleDownPow10(uint64_t *outHi, uint64_t *outLo, uint64_t dw1, ui
     *outLo = dw0T;
     return scaleResidue;
 }
+
 
 /* --------------------------------------------------------------------------
  * DPD declet conversion
@@ -481,23 +585,10 @@ static uint64_t decletsFromBin(uint64_t bin) {
     return declets;
 }
 
+
 /* --------------------------------------------------------------------------
  * Rendering integers into ASCII
- * ------------------------------------------------------------------------ */
-
-/*
- * Reciprocal-multiplication constants. The 64-bit ones fold in the 64-bit
- * shift that mulhi64 already performs, so the named shift is the remainder.
- */
-#define M_U64_DIV_1E8 (0x8000000000000000ULL | 0x2BCC77118461CEFDULL)
-#define S_U64_DIV_1E8 26
-#define M_U32_DIV_1E1 0xCCCCCCCDULL
-#define S_U32_DIV_1E1 35
-#define M_U32_DIV_1E2 0x51EB851FULL
-#define S_U32_DIV_1E2 37
-#define M_U64_DIV_1E4 0x346DC5D63886594BULL
-#define S_U64_DIV_1E4 11
-#define MASK32 0xFFFFFFFFULL
+ * ---------------------------------------------------------------------- */
 
 /*
  * Render exactly 8 decimal digits of dw, ending at offMaxx. Zero-pads. The
@@ -637,6 +728,7 @@ static int appendInt(char *out, int v) {
     return len;
 }
 
+
 /* --------------------------------------------------------------------------
  * Rendering a decoded value
  *
@@ -653,8 +745,6 @@ static int appendInt(char *out, int v) {
  * where the byte is a TRAILING '+' overwritten by appendInt's own '-'.
  * ------------------------------------------------------------------------ */
 
-static const char INFINITY_TEXT[] = "Infinity";
-
 static int infAscii(char *out, bool sign) {
     int signLen = sign ? 1 : 0;
     int totalLen = signLen + (int)sizeof(INFINITY_TEXT) - 1;
@@ -663,8 +753,6 @@ static int infAscii(char *out, bool sign) {
     memcpy(out + signLen, INFINITY_TEXT, sizeof(INFINITY_TEXT));
     return totalLen;
 }
-
-static const char NAN_TEXT[] = "NaN";
 
 static int nanAscii(char *out, bool sign, bool isSignaling, uint64_t payloadHi, uint64_t payloadLo) {
     int signLen = sign ? 1 : 0;
@@ -690,16 +778,6 @@ static int nanAscii(char *out, bool sign, bool isSignaling, uint64_t payloadHi, 
     out[totalLen] = '\0';
     return totalLen;
 }
-
-/*
- * Every plain-form zero is a prefix of this literal. k = -qExp is the count of
- * zeros after the radix point, so k = 0 renders "0" with no radix point at all
- * and k >= 1 renders "0." followed by k zeros -- lengths 1 and k + 2.
- */
-static const char PLAIN_ZERO[] = "0.000000";
-
-/* The exponent form's base. The '+' is not here: see zerAscii below. */
-static const char ZERO_EXP_TEXT[] = "0E";
 
 static int zerAscii(char *out, bool sign, int qExp) {
     if (qExp <= 0 && qExp >= -6) {
@@ -817,9 +895,10 @@ static int fnzAscii(char *out, bool sign, int qExp, uint64_t dw1, uint64_t dw0) 
     return fnzToNormalizedScientificAscii(out, sign, qExp, digitLen, dw1, dw0);
 }
 
+
 /* --------------------------------------------------------------------------
  * bits -> text
- * ------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------- */
 
 /* Unpack a BID128 encoding, per IEEE 754-2019 3.5.2, and render it. */
 static int decodeBid128toAscii(char *out, uint64_t bid128Hi, uint64_t bid128Lo) {
@@ -923,6 +1002,7 @@ static int decodeDpd128toAscii(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo) 
     return fnzAscii(out, sign, qExp, dw1, dw0);
 }
 
+
 /* --------------------------------------------------------------------------
  * Packing a finalized value into an encoding
  *
@@ -1025,14 +1105,15 @@ static void setNaN(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign, bool
         dpd128SetNaN(hi, lo, sign, isSignaling, payloadDw1, payloadDw0);
 }
 
+
+/* --------------------------------------------------------------------------
+ * Finalize: rounding, clamping, underflow
+ * ---------------------------------------------------------------------- */
+
 static void finalizeOverflow(uint64_t *hi, uint64_t *lo, bool sign) {
     *hi = (sign ? SIGN_BIT : 0) | INF_PATTERN_HI;
     *lo = 0;
 }
-
-/* --------------------------------------------------------------------------
- * Finalize: rounding, clamping, underflow
- * ------------------------------------------------------------------------ */
 
 static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign,
                                    int qExpIn, uint64_t dw1In, uint64_t dw0In, int residueIn);
@@ -1228,9 +1309,10 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
     setFinite(hi, lo, formatIsBid, sign, qExp, dw1, dw0);
 }
 
+
 /* --------------------------------------------------------------------------
  * text -> bits
- * ------------------------------------------------------------------------ */
+ * ---------------------------------------------------------------------- */
 
 /*
  * The code of the character at [index], or -1 at end of input.
@@ -1511,39 +1593,4 @@ static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIs
     if (chFirst == -1)
         return "EMPTY_STRING";
     return "INVALID_FORMAT";
-}
-
-/* --------------------------------------------------------------------------
- * The published surface
- * ------------------------------------------------------------------------ */
-
-int d128text_bid128ToAscii(char *out, uint64_t hi, uint64_t lo) {
-    demand(out != NULL);
-    return decodeBid128toAscii(out, hi, lo);
-}
-
-int d128text_dpd128ToAscii(char *out, uint64_t hi, uint64_t lo) {
-    demand(out != NULL);
-    return decodeDpd128toAscii(out, hi, lo);
-}
-
-static const char *parseInto(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *text) {
-    demand(hi != NULL && lo != NULL && text != NULL);
-    const char *errorStr = encodeStringOrError(hi, lo, formatIsBid, text);
-    if (errorStr != NULL) {
-        /* Always write the out-params, so a caller who discards the return
-         * value still observes a legal datum. The canonical positive quiet NaN
-         * is the same bit pattern in both formats. */
-        *hi = QNAN_PATTERN_HI;
-        *lo = 0;
-    }
-    return errorStr;
-}
-
-const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *text) {
-    return parseInto(hi, lo, true, text);
-}
-
-const char *d128text_dpd128Parse(uint64_t *hi, uint64_t *lo, const char *text) {
-    return parseInto(hi, lo, false, text);
 }
