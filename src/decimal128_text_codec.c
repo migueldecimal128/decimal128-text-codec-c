@@ -286,8 +286,9 @@ static inline uint64_t mulhi64(uint64_t x, uint64_t y) {
 
 /* Leading zero count, 64 for zero. */
 static inline int clz64(uint64_t v) {
-    if (v == 0)
+    if (v == 0) {
         return 64;
+    }
 #if defined(__GNUC__) || defined(__clang__)
     return __builtin_clzll(v);
 #else
@@ -304,10 +305,12 @@ static inline int clz64(uint64_t v) {
 
 /* Bit length of a 128-bit value: highest set bit plus one, 0 for zero. */
 static inline int calcBitLen128(uint64_t dw1, uint64_t dw0) {
-    if (dw1 != 0)
+    if (dw1 != 0) {
         return 128 - clz64(dw1);
-    if (dw0 != 0)
+    }
+    if (dw0 != 0) {
         return 64 - clz64(dw0);
+    }
     return 0;
 }
 
@@ -325,8 +328,9 @@ static inline int calcDigitLen128(uint64_t dw1, uint64_t dw0) {
     int pow10Offset = loDigitCount << 1;
     uint64_t p1 = POW10[pow10Offset + 1];
     uint64_t p0 = POW10[pow10Offset];
-    if (dw1 != p1)
+    if (dw1 != p1) {
         return (dw1 < p1) ? hiDigitCount - 1 : hiDigitCount;
+    }
     return (dw0 < p0) ? hiDigitCount - 1 : hiDigitCount;
 }
 
@@ -404,18 +408,21 @@ static inline int residueMerge(int roundResidue, int stickyResidue) {
 
 /* Classify a 128-bit value relative to half of 10^pow10. */
 static int residueFromValuePow10(uint64_t dw1, uint64_t dw0, int pow10) {
-    if ((dw1 | dw0) == 0)
+    if ((dw1 | dw0) == 0) {
         return EXACT;
+    }
     int pow10Index = pow10 << 1;
     uint64_t pow10Hi = POW10[pow10Index + 1];
     uint64_t pow10Lo = POW10[pow10Index];
 
     uint64_t halfHi = pow10Hi >> 1;
     uint64_t halfLo = (pow10Hi << 63) | (pow10Lo >> 1);
-    if (dw1 != halfHi)
+    if (dw1 != halfHi) {
         return (dw1 < halfHi) ? LT_HALF : GT_HALF;
-    if (dw0 != halfLo)
+    }
+    if (dw0 != halfLo) {
         return (dw0 < halfLo) ? LT_HALF : GT_HALF;
+    }
     return HALF;
 }
 
@@ -430,13 +437,13 @@ static int u128ScaleDownPow10(uint64_t *outHi, uint64_t *outLo, uint64_t dw1, ui
     uint64_t dw1T = dw1;
     uint64_t dw0T = dw0;
     int digitsRemaining = truncationNeeded;
-    do {
+    while (digitsRemaining > 0) {
         int stepPow10 = (digitsRemaining < 9) ? digitsRemaining : 9;
         uint64_t rem = u113DivModPow10Max9(&dw1T, &dw0T, dw1T, dw0T, stepPow10);
         int stepResidue = residueFromValuePow10(0, rem, stepPow10);
         scaleResidue = residueMerge(stepResidue, scaleResidue);
         digitsRemaining -= stepPow10;
-    } while (digitsRemaining > 0);
+    }
     *outHi = dw1T;
     *outLo = dw0T;
     return scaleResidue;
@@ -459,8 +466,9 @@ static int u128ScaleDownPow10(uint64_t *outHi, uint64_t *outLo, uint64_t dw1, ui
 static uint64_t dpdDecodeDeclet(uint64_t declet) {
     verify(declet <= 1023);
 
-    if (declet == 0)
+    if (declet == 0) {
         return 0;
+    }
 
     uint64_t p = (declet >> 9) & 1;
     uint64_t q = (declet >> 8) & 1;
@@ -506,8 +514,9 @@ static uint64_t dpdDecodeDeclet(uint64_t declet) {
 static uint64_t dpdEncodeDeclet(uint64_t n) {
     verify(n <= 999);
 
-    if (n == 0)
+    if (n == 0) {
         return 0;
+    }
 
     uint64_t q10 = (n * 205) >> 11;  /* n / 10, exact for n <= 999 */
     uint64_t q100 = (n * 41) >> 12;  /* n / 100, exact for n <= 999 */
@@ -659,9 +668,10 @@ static void renderTailDigitsBeforeIndex(int renderDigitCount, uint64_t dw, char 
     while (remainingDigitCount > 0) {
         uint64_t divTen = (t * M_U32_DIV_1E1) >> S_U32_DIV_1E1;
         int digit = (int)(t - (divTen * 10));
-        ascii[--ib] = (char)('0' + digit);
+        ib -= 1;
+        ascii[ib] = (char)('0' + digit);
         t = divTen;
-        --remainingDigitCount;
+        remainingDigitCount -= 1;
     }
     verify(offMaxx - ib == renderDigitCount);
 }
@@ -702,30 +712,33 @@ static int u128ToAscii(int digitPrintCount, uint64_t dw1, uint64_t dw0, char *as
         ich -= 8;
         remainingDigitCount -= 8;
     }
-    if (remainingDigitCount > 0)
+    if (remainingDigitCount > 0) {
         renderTailDigitsBeforeIndex(remainingDigitCount, dw0T, ascii, ich);
+    }
     return digitPrintCount;
 }
 
 /* Write a signed decimal integer; returns the number of characters written. */
 static int appendInt(char *out, int v) {
-    char tmp[12];
-    int n = 0;
-    int len = 0;
-    unsigned int magnitude;
+    int signLen = 0;
+    unsigned int magnitude = (unsigned int)v;
     if (v < 0) {
-        out[len++] = '-';
+        out[0] = '-';
+        signLen = 1;
         magnitude = (unsigned int)(-(long)v);
-    } else {
-        magnitude = (unsigned int)v;
     }
-    do {
-        tmp[n++] = (char)('0' + (magnitude % 10));
-        magnitude /= 10;
-    } while (magnitude != 0);
-    while (n > 0)
-        out[len++] = tmp[--n];
-    return len;
+    int digitLen;
+    if (magnitude >= 1000) {
+        digitLen = 4;
+    } else if (magnitude >= 100) {
+        digitLen = 3;
+    } else if (magnitude >= 10) {
+        digitLen = 2;
+    } else {
+        digitLen = 1;
+    }
+    renderTailDigitsBeforeIndex(digitLen, (uint64_t)magnitude, out, signLen + digitLen);
+    return signLen + digitLen;
 }
 
 
@@ -832,18 +845,25 @@ static int fnzToIntegerAscii(char *out, bool sign, int digitLen, uint64_t dw1, u
 static int fnzToDecimalPointAscii(char *out, bool sign, int qExp, int digitLen, uint64_t dw1, uint64_t dw0) {
     int digitsRightOfDecimal = -qExp;
     int leadingZeroCount = 1 + digitsRightOfDecimal - digitLen;
-    if (leadingZeroCount < 0)
+    if (leadingZeroCount < 0) {
         leadingZeroCount = 0;
+    }
     int signLen = sign ? 1 : 0;
     int decimalPointLen = 1;
     int totalLen = signLen + leadingZeroCount + decimalPointLen + digitLen;
     demand(totalLen + 1 <= D128TEXT_MAX_LEN);
     out[0] = '-';
-    for (int i = signLen; i <= leadingZeroCount; ++i) /* one extra, overwritten below */
+    int i = signLen;
+    while (i <= leadingZeroCount) { /* one extra, overwritten below */
         out[i] = '0';
+        i += 1;
+    }
     u128ToAscii(digitLen, dw1, dw0, out, signLen + leadingZeroCount);
-    for (int i = totalLen - 1; i >= totalLen - digitsRightOfDecimal; --i)
-        out[i] = out[i - 1];
+    int j = totalLen - 1;
+    while (j >= totalLen - digitsRightOfDecimal) {
+        out[j] = out[j - 1];
+        j -= 1;
+    }
     out[totalLen - digitsRightOfDecimal - 1] = '.';
     out[totalLen] = '\0';
     return totalLen;
@@ -888,10 +908,12 @@ static int fnzToNormalizedScientificAscii(char *out, bool sign, int qExp, int di
 static int fnzAscii(char *out, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
     int digitLen = calcDigitLen128(dw1, dw0);
     int eExp = qExp + (digitLen - 1);
-    if (qExp == 0)
+    if (qExp == 0) {
         return fnzToIntegerAscii(out, sign, digitLen, dw1, dw0);
-    if (qExp <= 0 && eExp >= -6)
+    }
+    if (qExp <= 0 && eExp >= -6) {
         return fnzToDecimalPointAscii(out, sign, qExp, digitLen, dw1, dw0);
+    }
     return fnzToNormalizedScientificAscii(out, sign, qExp, digitLen, dw1, dw0);
 }
 
@@ -938,8 +960,9 @@ static int decodeBid128toAscii(char *out, uint64_t bid128Hi, uint64_t bid128Lo) 
      * and the value used for it is zero, sign and exponent retained. */
     if ((dw1 | dw0) == 0 ||
         dw1 > MAXX_COEFF_34_HI ||
-        (dw1 == MAXX_COEFF_34_HI && dw0 >= MAXX_COEFF_34_LO))
+        (dw1 == MAXX_COEFF_34_HI && dw0 >= MAXX_COEFF_34_LO)) {
         return zerAscii(out, sign, qExp);
+    }
     return fnzAscii(out, sign, qExp, dw1, dw0);
 }
 
@@ -995,10 +1018,12 @@ static int decodeDpd128toAscii(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo) 
         dw1 = mulhi64(binHi, TEN_POW_18) + carry;
     }
 
-    if (isNaN)
+    if (isNaN) {
         return nanAscii(out, sign, isSignaling, dw1, dw0);
-    if ((dw1 | dw0) == 0)
+    }
+    if ((dw1 | dw0) == 0) {
         return zerAscii(out, sign, qExp);
+    }
     return fnzAscii(out, sign, qExp, dw1, dw0);
 }
 
@@ -1062,10 +1087,11 @@ static void dpd128SetFinite(uint64_t *hi, uint64_t *lo, bool sign, int qExp, uin
 }
 
 static void setFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
-    if (formatIsBid)
+    if (formatIsBid) {
         bid128SetFinite(hi, lo, sign, qExp, dw1, dw0);
-    else
+    } else {
         dpd128SetFinite(hi, lo, sign, qExp, dw1, dw0);
+    }
 }
 
 static void bid128SetNaN(uint64_t *hi, uint64_t *lo, bool sign, bool isSignaling, uint64_t payloadDw1, uint64_t payloadDw0) {
@@ -1099,10 +1125,11 @@ static void dpd128SetNaN(uint64_t *hi, uint64_t *lo, bool sign, bool isSignaling
 }
 
 static void setNaN(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign, bool isSignaling, uint64_t payloadDw1, uint64_t payloadDw0) {
-    if (formatIsBid)
+    if (formatIsBid) {
         bid128SetNaN(hi, lo, sign, isSignaling, payloadDw1, payloadDw0);
-    else
+    } else {
         dpd128SetNaN(hi, lo, sign, isSignaling, payloadDw1, payloadDw0);
+    }
 }
 
 
@@ -1120,11 +1147,13 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
 
 /* Does this coefficient/exponent pair fit as a canonical encoding? */
 static inline bool coeffQExpFit(uint64_t dw1, uint64_t dw0, int qExp) {
-    if (qExp < Q_MIN || qExp > Q_MAX)
+    if (qExp < Q_MIN || qExp > Q_MAX) {
         return false;
+    }
     /* at most 113 bits is necessarily below 10^34, since 2^113 > 10^34 */
-    if (clz64(dw1) > 128 - 113)
+    if (clz64(dw1) > 128 - 113) {
         return true;
+    }
     return dw1 < MAXX_COEFF_34_HI || (dw1 == MAXX_COEFF_34_HI && dw0 < MAXX_COEFF_34_LO);
 }
 
@@ -1178,12 +1207,12 @@ static void finalizeSubnormal(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool
 
     bool roundUp = (totalResidue == GT_HALF) || (totalResidue == HALF && (dw0T & 1) != 0);
     if (roundUp) {
-        ++dw0T;
+        dw0T += 1;
         dw1T += (dw0T == 0) ? 1 : 0;
         if (dw1T == MAXX_COEFF_34_HI && dw0T == MAXX_COEFF_34_LO) {
             dw1T = MIN_PRECISION_34_COEFF_HI;
             dw0T = MIN_PRECISION_34_COEFF_LO;
-            ++qExpT;
+            qExpT += 1;
         }
     }
     setFinite(hi, lo, formatIsBid, sign, qExpT, dw1T, dw0T);
@@ -1231,10 +1260,12 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
         /* Step 2 */
         if ((dw1In | dw0In) == 0) {
             int qClamped = qExpIn;
-            if (qClamped > Q_MAX)
+            if (qClamped > Q_MAX) {
                 qClamped = Q_MAX;
-            if (qClamped < Q_MIN)
+            }
+            if (qClamped < Q_MIN) {
                 qClamped = Q_MIN;
+            }
             setFinite(hi, lo, formatIsBid, sign, qClamped, 0, 0);
             return;
         }
@@ -1285,12 +1316,12 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
     /* Step 6 -- ties-to-even, the only rounding this codec has */
     bool applyRounding = (totalResidue == GT_HALF) || (totalResidue == HALF && (dw0 & 1) != 0);
     if (applyRounding) {
-        ++dw0;
+        dw0 += 1;
         dw1 += (dw0 == 0) ? 1 : 0;
         if (dw1 == MAXX_COEFF_34_HI && dw0 == MAXX_COEFF_34_LO) {
             dw1 = MIN_PRECISION_34_COEFF_HI;
             dw0 = MIN_PRECISION_34_COEFF_LO;
-            ++qExp;
+            qExp += 1;
         }
     }
 
@@ -1300,10 +1331,11 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
     if (qExp > Q_MAX) {
         int qExcess = qExp - Q_MAX;
         int digitLen = calcDigitLen128(dw1, dw0);
-        if (digitLen + qExcess <= 34)
+        if (digitLen + qExcess <= 34) {
             finalizeClamping(hi, lo, formatIsBid, sign, qExp, dw1, dw0);
-        else
+        } else {
             finalizeOverflow(hi, lo, sign);
+        }
         return;
     }
     setFinite(hi, lo, formatIsBid, sign, qExp, dw1, dw0);
@@ -1380,43 +1412,53 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
             hasCoefficientDigit = true;
             /* count while flushing leading zeros */
             significantDigitCount += ((significantDigitCount | d) != 0);
-            if (significantDigitCount <= 19)
+            if (significantDigitCount <= 19) {
                 accum19a = (accum19a * 10) + (uint64_t)d;
-            else if (significantDigitCount <= 34)
+            } else if (significantDigitCount <= 34) {
                 accum19b = (accum19b * 10) + (uint64_t)d;
-            else if (significantDigitCount == 34 + 1)
+            } else if (significantDigitCount == 34 + 1) {
                 residue = residueFromDecimalDigit(d);
-            else
+            } else {
                 residue = residueMerge(residue, residueFromDecimalDigit(d));
-            if (hasDot)
-                ++fractionalDigitCount;
+            }
+            if (hasDot) {
+                fractionalDigitCount += 1;
+            }
             prevWasDigit = true;
             afterUnderscore = false;
         } else if (ch == '_') {
-            if (!prevWasDigit)
+            if (!prevWasDigit) {
                 return "INVALID_UNDERSCORE_LOCATION";
+            }
             prevWasDigit = false;
             afterUnderscore = true;
         } else { /* '.' */
-            if (afterUnderscore)
+            if (afterUnderscore) {
                 return "INVALID_UNDERSCORE_LOCATION";
-            if (hasDot)
+            }
+            if (hasDot) {
                 return "DOUBLE_DOT";
+            }
             hasDot = true;
             prevWasDigit = false;
         }
-        ch = codeAt(str, pos++);
+        ch = codeAt(str, pos);
+        pos += 1;
     }
-    if (afterUnderscore)
+    if (afterUnderscore) {
         return "INVALID_UNDERSCORE_LOCATION";
-    if (!hasCoefficientDigit)
+    }
+    if (!hasCoefficientDigit) {
         return "NO_COEFFICIENT_DIGIT";
+    }
     /* this path has at least one digit */
     if (ch == 'E' || ch == 'e') {
-        ch = codeAt(str, pos++);
+        ch = codeAt(str, pos);
+        pos += 1;
         if (ch == '+' || ch == '-') {
             expSign = (ch == '-');
-            ch = codeAt(str, pos++);
+            ch = codeAt(str, pos);
+            pos += 1;
         }
         bool hasExpDigit = false;
         int expSignificantDigitCount = 0;
@@ -1424,8 +1466,9 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
         afterUnderscore = false;
         while (isDigit(ch) || ch == '_') {
             if (ch == '_') {
-                if (!prevWasDigit)
+                if (!prevWasDigit) {
                     return "INVALID_UNDERSCORE_LOCATION";
+                }
                 prevWasDigit = false;
                 afterUnderscore = true;
             } else {
@@ -1437,18 +1480,23 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
                 prevWasDigit = true;
                 afterUnderscore = false;
             }
-            ch = codeAt(str, pos++);
+            ch = codeAt(str, pos);
+            pos += 1;
         }
-        if (afterUnderscore)
+        if (afterUnderscore) {
             return "INVALID_UNDERSCORE_LOCATION";
-        if (!hasExpDigit)
+        }
+        if (!hasExpDigit) {
             return "NO_EXPONENT_DIGIT";
+        }
         /* clamp once after the loop */
-        if (expSignificantDigitCount > 4)
+        if (expSignificantDigitCount > 4) {
             exp = 9999;
+        }
     }
-    if (ch != -1)
+    if (ch != -1) {
         return "UNEXPECTED_CHAR";
+    }
 
     uint64_t dw0 = accum19a;
     uint64_t dw1 = 0;
@@ -1476,18 +1524,23 @@ static const char *parseInfinityText(uint64_t *hi, uint64_t *lo, bool sign,
     int ch = chFirst;
     int chPrevCode = 0;
     static const char target[] = "infinity";
-    for (int i = 0; i < 8; ++i) {
+    int i = 0;
+    while (i < 8) {
         int targetCode = (unsigned char)target[i];
         if ((ch | 0x20) != targetCode) {
-            if (ch == -1)
+            if (ch == -1) {
                 break;
+            }
             return "FAILURE_PARSING_INFINITY";
         }
         chPrevCode = ch | 0x20;
-        ch = codeAt(str, pos++);
+        ch = codeAt(str, pos);
+        pos += 1;
+        i += 1;
     }
-    if (ch != -1 || (chPrevCode != 'f' && chPrevCode != 'y'))
+    if (ch != -1 || (chPrevCode != 'f' && chPrevCode != 'y')) {
         return "FAILURE_PARSING_INFINITY";
+    }
     *hi = INF_PATTERN_HI | (sign ? SIGN_BIT : 0);
     *lo = 0;
     return NULL;
@@ -1518,19 +1571,26 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
     int ch = chFirst;
     bool hasS = (ch | 0x20) == 's';
     bool hasQ = (ch | 0x20) == 'q';
-    if (hasQ || hasS)
-        ch = codeAt(str, pos++);
+    if (hasQ || hasS) {
+        ch = codeAt(str, pos);
+        pos += 1;
+    }
     if (((ch | 0x20) != 'n') ||
-        ((codeAt(str, pos++) | 0x20) != 'a') ||
-        ((codeAt(str, pos++) | 0x20) != 'n'))
+        ((codeAt(str, pos) | 0x20) != 'a') ||
+        ((codeAt(str, pos + 1) | 0x20) != 'n')) {
         return "FAILURE_PARSING_NAN";
+    }
+    pos += 2;
 
     uint64_t payloadDw0 = 0;
     uint64_t payloadDw1 = 0;
-    ch = codeAt(str, pos++);
+    ch = codeAt(str, pos);
+    pos += 1;
     bool hasParen = (ch == '(');
-    if (hasParen)
-        ch = codeAt(str, pos++);
+    if (hasParen) {
+        ch = codeAt(str, pos);
+        pos += 1;
+    }
     if (hasParen || ch != -1) {
         int accumDigitCount = 0;
         uint64_t accum19a = 0;
@@ -1543,21 +1603,26 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
              * a one is over the limit and reads as zero. Leading zeros
              * contribute nothing to the accumulators, so the value of a
              * payload within the limit is unaffected. */
-            ++accumDigitCount;
-            if (accumDigitCount <= 19)
+            accumDigitCount += 1;
+            if (accumDigitCount <= 19) {
                 accum19a = (accum19a * 10) + (uint64_t)d;
-            else
+            } else {
                 accum19b = (accum19b * 10) + (uint64_t)d;
-            ch = codeAt(str, pos++);
+            }
+            ch = codeAt(str, pos);
+            pos += 1;
         }
-        if (accumDigitCount == 0)
+        if (accumDigitCount == 0) {
             return "FAILURE_PARSING_NAN";
+        }
         if (hasParen) {
             /* the ')' must be present and must end the input */
-            if (ch != ')')
+            if (ch != ')') {
                 return "FAILURE_PARSING_NAN";
-            if (codeAt(str, pos++) != -1)
+            }
+            if (codeAt(str, pos) != -1) {
                 return "FAILURE_PARSING_NAN";
+            }
         } else if (ch != -1) {
             return "FAILURE_PARSING_NAN";
         }
@@ -1567,8 +1632,9 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
         } else {
             payloadDw0 = accum19a;
             payloadDw1 = 0;
-            if (accumDigitCount > 19)
+            if (accumDigitCount > 19) {
                 u128FmaPow10(&payloadDw1, &payloadDw0, accum19a, accumDigitCount - 19, accum19b);
+            }
         }
     }
     setNaN(hi, lo, formatIsBid, sign, hasS, payloadDw1, payloadDw0);
@@ -1578,19 +1644,26 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
 /* Read the optional sign, then dispatch on the leading character. */
 static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *str) {
     size_t pos = 0;
-    int chFirst = codeAt(str, pos++);
+    int chFirst = codeAt(str, pos);
+    pos += 1;
     int ch = chFirst;
     bool sign = (ch == '-');
-    if (ch == '+' || ch == '-')
-        ch = codeAt(str, pos++);
-    if (isDigit(ch) || ch == '.')
+    if (ch == '+' || ch == '-') {
+        ch = codeAt(str, pos);
+        pos += 1;
+    }
+    if (isDigit(ch) || ch == '.') {
         return parseFiniteValueText(hi, lo, formatIsBid, sign, ch, str, pos);
+    }
     int chLower = ch | 0x20;
-    if (chLower == 'i')
+    if (chLower == 'i') {
         return parseInfinityText(hi, lo, sign, ch, str, pos);
-    if (chLower == 'n' || chLower == 's' || chLower == 'q')
+    }
+    if (chLower == 'n' || chLower == 's' || chLower == 'q') {
         return parseNanText(hi, lo, formatIsBid, sign, ch, str, pos);
-    if (chFirst == -1)
+    }
+    if (chFirst == -1) {
         return "EMPTY_STRING";
+    }
     return "INVALID_FORMAT";
 }
