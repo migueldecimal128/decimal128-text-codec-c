@@ -45,6 +45,7 @@
 #define CODEC_NORETURN _Noreturn
 #endif
 
+/* Unconditional abort marking unreachable code. */
 CODEC_NORETURN static void impossible(const char *message) {
     fputs("decimal128-text-codec: impossible state: ", stderr);
     fputs(message, stderr);
@@ -102,6 +103,12 @@ const char *d128text_dpd128Parse(uint64_t *hi, uint64_t *lo, const char *str) {
     return parseInto(hi, lo, false, str);
 }
 
+/*
+ * The encoding is written on both paths -- the encoding on success, the canonical positive
+ * quiet NaN on failure -- so the caller never reads back what was there before the call. That
+ * is why a failure is reported beside the value rather than in place of it: a caller who
+ * discards the message still holds a legal IEEE 754-2019 datum.
+ */
 static const char *parseInto(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *str) {
     demand(hi != NULL && lo != NULL && str != NULL);
     const char *errorStr = encodeStringOrError(hi, lo, formatIsBid, str);
@@ -255,12 +262,10 @@ static const char ZERO_EXP_TEXT[] = "0E";
  * Low-level unsigned arithmetic
  * ---------------------------------------------------------------------- */
 
-/*
- * High 64 bits of the 128-bit product x * y. The portable branch is the
- * reference's four-partial-product decomposition, which is also the MSVC
- * synthesize-from-limbs path on targets without __umulh.
- */
+/* Compute the high 64 bits of the 128-bit unsigned product x * y. */
 static inline uint64_t mulhi64(uint64_t x, uint64_t y) {
+    // The portable branch is the reference's four-partial-product decomposition, which is also
+    // the MSVC synthesize-from-limbs path on targets without __umulh.
 #if defined(__SIZEOF_INT128__) && !defined(D128TEXT_NO_INT128)
     return (uint64_t)(((unsigned __int128)x * (unsigned __int128)y) >> 64);
 #elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_ARM64))
@@ -303,7 +308,10 @@ static inline int clz64(uint64_t v) {
 #endif
 }
 
-/* Bit length of a 128-bit value: highest set bit plus one, 0 for zero. */
+/*
+ * Compute the bit-length of a 128-bit unsigned value: the position of the highest set bit,
+ * plus one. Returns 0 for the zero value.
+ */
 static inline int calcBitLen128(uint64_t dw1, uint64_t dw0) {
     if (dw1 != 0) {
         return 128 - clz64(dw1);
@@ -315,11 +323,10 @@ static inline int calcBitLen128(uint64_t dw1, uint64_t dw0) {
 }
 
 /*
- * Decimal digit count of a 128-bit value.
- *
- * (bitLen * 1233) >> 12 is floor(bitLen * log10(2)), which is either the exact
- * digit count or one too small; a single unsigned compare against the
- * next-larger power of ten resolves the off-by-one.
+ * Compute the decimal digit count of a 128-bit unsigned value. Uses the standard log10/log2
+ * approximation: for any non-zero bitLen, (bitLen * 1233) >> 12 is floor(bitLen * log10(2)),
+ * which is either the exact digit count or one too small. A single unsigned 128-bit compare
+ * against the next-larger power of 10 in POW10 resolves the off-by-one.
  */
 static inline int calcDigitLen128(uint64_t dw1, uint64_t dw0) {
     int bitLen = calcBitLen128(dw1, dw0);
@@ -335,10 +342,11 @@ static inline int calcDigitLen128(uint64_t dw1, uint64_t dw0) {
 }
 
 /*
- * Multiply a 64-bit value by 10^pow10 and add a; the 128-bit result goes to
- * *outHi / *outLo.
+ * Multiply a 64-bit unsigned value x by 10^pow10 and add a 64-bit integer a, producing the
+ * 128-bit result.
  */
 static inline void u128FmaPow10(uint64_t *outHi, uint64_t *outLo, uint64_t x, int pow10, uint64_t a) {
+    // The 128-bit result goes to *outHi / *outLo.
     uint64_t y = POW10[pow10 << 1];
     uint64_t prodLo = x * y;
     uint64_t prodHi = mulhi64(x, y);
@@ -353,14 +361,13 @@ static inline void u128FmaPow10(uint64_t *outHi, uint64_t *outLo, uint64_t x, in
  * ---------------------------------------------------------------------- */
 
 /*
- * Divide a 113-bit value by 10^pow10 for pow10 in 1..9, returning the
- * remainder and writing the quotient to *qHi / *qLo.
- *
- * Table-free: 10^pow10 factors as 2^pow10 * 5^pow10, so the low pow10 bits
- * fall straight out as the low part of the remainder and the shifted value is
- * divided by 5^pow10 with two hardware 64-bit divides.
+ * Divide a 113-bit unsigned coefficient by 10^pow10 for pow10 in 1..9, producing the quotient
+ * and the remainder. Factors 10^pow10 as 2^pow10 * 5^pow10: the low pow10 bits are extracted
+ * directly as the low part of the remainder, then the shifted value is divided by 5^pow10
+ * using two hardware 64-bit divides.
  */
 static uint64_t u113DivModPow10Max9(uint64_t *qHi, uint64_t *qLo, uint64_t dwHi, uint64_t dwLo, int pow10) {
+    // Returns the remainder and writes the quotient to *qHi / *qLo.
     verify(pow10 >= 1 && pow10 <= 9);
     verify(clz64(dwHi) >= 15);
 
@@ -392,21 +399,31 @@ static uint64_t u113DivModPow10Max9(uint64_t *qHi, uint64_t *qLo, uint64_t dwHi,
  * Residue -- how much was discarded, relative to half a ulp
  * ---------------------------------------------------------------------- */
 
+/*
+ * Classify a single discarded decimal digit (0..9) as EXACT, LT_HALF, HALF, or GT_HALF via
+ * lookup in DIGIT_MAP.
+ */
 static inline int residueFromDecimalDigit(int digit) {
     return (int)((DIGIT_MAP >> (digit << 1)) & 0x03ULL);
 }
 
 /*
- * Combine a primary residue with a sticky one from less-significant digits,
- * round-bit-and-sticky-bit style: the sticky residue collapses to a single
- * nonzero bit which is OR'd into the low bit of the round residue.
+ * Combine a primary roundResidue with a stickyResidue from less-significant digits, in the
+ * round-bit-and-sticky-bit style. The sticky residue is collapsed to a single "nonzero" bit
+ * and OR'd into the low bit of the round residue.
  */
 static inline int residueMerge(int roundResidue, int stickyResidue) {
     int s = (stickyResidue & 1) | (stickyResidue >> 1);
     return (roundResidue | s) & 0x03;
 }
 
-/* Classify a 128-bit value relative to half of 10^pow10. */
+/*
+ * Classify a 128-bit unsigned value relative to half of 10^pow10, returning one of EXACT,
+ * LT_HALF, HALF, or GT_HALF. Used in the underflow boundary case where the entire coefficient
+ * is being discarded by truncation: the residue is determined by where the coefficient falls
+ * relative to half-of-the-truncation-divisor. Looks up 10^pow10 in the POW10 table, halves it
+ * via a 128-bit shift right by 1, and compares against the input as an unsigned 128-bit value.
+ */
 static int residueFromValuePow10(uint64_t dw1, uint64_t dw0, int pow10) {
     if ((dw1 | dw0) == 0) {
         return EXACT;
@@ -427,10 +444,12 @@ static int residueFromValuePow10(uint64_t dw1, uint64_t dw0, int pow10) {
 }
 
 /*
- * Divide a 128-bit coefficient by 10^truncationNeeded, in chunks of at most
- * nine digits, returning the accumulated residue class.
+ * Divide a 128-bit unsigned coefficient by 10^truncationNeeded, producing the quotient and the
+ * round-and-sticky residue class of what was discarded. Truncates in chunks of up to 9 digits
+ * via u113DivModPow10Max9.
  */
 static int u128ScaleDownPow10(uint64_t *outHi, uint64_t *outLo, uint64_t dw1, uint64_t dw0, int truncationNeeded) {
+    // The quotient goes to *outHi / *outLo; the residue class is the return value.
     verify((dw1 | dw0) != 0);
     verify(truncationNeeded > 0 && truncationNeeded < calcDigitLen128(dw1, dw0));
     int scaleResidue = EXACT;
@@ -461,8 +480,11 @@ static int u128ScaleDownPow10(uint64_t *outHi, uint64_t *outLo, uint64_t dw1, ui
  * bcd2dpd) rather than lookup tables.
  * ------------------------------------------------------------------------ */
 
-/* Decode a 10-bit declet (bits p q r s t u v w x y) into 0..999. Accepts the
- * 24 non-canonical declets as well as the 1000 canonical ones. */
+/*
+ * Decode a 10-bit DPD declet (bits 9..0) into 0..999. Mapping: bit9..bit0 as p q r s t u v w x
+ * y. Accepts the 24 non-canonical declets as well as the 1000 canonical ones, per Cowlishaw's
+ * dpd2bcd.
+ */
 static uint64_t dpdDecodeDeclet(uint64_t declet) {
     verify(declet <= 1023);
 
@@ -509,8 +531,12 @@ static uint64_t dpdDecodeDeclet(uint64_t declet) {
     return d2 * 100 + d1 * 10 + d0;
 }
 
-/* Encode 0..999 into a 10-bit declet. The inverse of dpdDecodeDeclet over the
- * canonical declets. */
+/*
+ * Encode 0..999 into a 10-bit DPD declet, per Cowlishaw's bcd2dpd. The inverse of
+ * dpdDecodeDeclet over canonical declets. Non-canonical declets decode to a value that
+ * re-encodes to the canonical declet for that value, so encode(decode(x)) == x only for
+ * canonical x.
+ */
 static uint64_t dpdEncodeDeclet(uint64_t n) {
     verify(n <= 999);
 
@@ -560,9 +586,9 @@ static uint64_t dpdEncodeDeclet(uint64_t n) {
 }
 
 /*
- * Decode up to seven packed declets into a binary integer. Declets are ten
- * bits each, least significant first; the topmost may be narrower, which is
- * how the coefficient's leading digit rides along -- 0..9 encodes to itself.
+ * Decode up to seven packed DPD declets into a binary integer. Declets are ten bits each,
+ * least significant first. The topmost may be narrower than ten bits, which is how the
+ * coefficient's leading digit is carried: 0..9 encodes to itself as a declet.
  */
 static uint64_t binFromDeclets(uint64_t declets) {
     uint64_t bin = 0;
@@ -578,8 +604,10 @@ static uint64_t binFromDeclets(uint64_t declets) {
     return bin;
 }
 
-/* Encode a value of at most 18 digits into six packed declets, least
- * significant first. The inverse of binFromDeclets over that range. */
+/*
+ * Encode a binary integer of at most 18 digits into six packed declets, least significant
+ * first. The inverse of binFromDeclets over that range.
+ */
 static uint64_t decletsFromBin(uint64_t bin) {
     verify(bin < TEN_POW_18);
     uint64_t rest = bin;
@@ -600,11 +628,11 @@ static uint64_t decletsFromBin(uint64_t bin) {
  * ---------------------------------------------------------------------- */
 
 /*
- * Render exactly 8 decimal digits of dw, ending at offMaxx. Zero-pads. The
- * caller guarantees dw < 10^8 and that the 8 bytes are inside the buffer.
- *
- * A binary cascade: one divide by 10^4 to split into halves, two by 10^2 to
- * split those into pairs, four by 10 for the digits.
+ * Render exactly 8 decimal digits of dw into ascii, ending at offMaxx. Caller must ensure dw <
+ * 10^8; the function pads with leading zeros if dw has fewer than 8 significant digits.
+ * Implemented as a binary cascade: / 10^4 once to split into two 4-digit halves, then / 10^2
+ * twice to split each half into two 2-digit pairs, then / 10 four times to extract individual
+ * digits. Always writes exactly 8 bytes at offsets offMaxx - 8 through offMaxx - 1.
  */
 static void render8DigitsBeforeIndex(uint64_t dw, char *ascii, int offMaxx) {
     uint64_t abcd = mulhi64(dw, M_U64_DIV_1E4) >> S_U64_DIV_1E4;
@@ -640,8 +668,16 @@ static void render8DigitsBeforeIndex(uint64_t dw, char *ascii, int offMaxx) {
 }
 
 /*
- * Render exactly renderDigitCount digits of dw, ending at offMaxx, zero-padded.
- * Four digits per iteration while at least four remain, then one at a time.
+ * Render exactly renderDigitCount decimal digits of dw into ascii, ending at offMaxx. Pads
+ * with leading zeros if dw has fewer significant digits than renderDigitCount. Two phases:
+ *
+ * - While at least 4 digits remain: peel 4 digits per iteration via / 10^4 followed by a
+ *   2-digit / 1-digit cascade.
+ * - For the remaining 0..3 digits: peel one digit at a time via / 10 through reciprocal
+ *   multiplication.
+ *
+ * Always writes exactly renderDigitCount bytes at offsets offMaxx - renderDigitCount through
+ * offMaxx - 1.
  */
 static void renderTailDigitsBeforeIndex(int renderDigitCount, uint64_t dw, char *ascii, int offMaxx) {
     uint64_t t = dw;
@@ -677,14 +713,20 @@ static void renderTailDigitsBeforeIndex(int renderDigitCount, uint64_t dw, char 
 }
 
 /*
- * Render a 128-bit value as digitPrintCount decimal digits, ending at
- * off + digitPrintCount.
+ * Render a 128-bit unsigned integer as digitPrintCount decimal digits into ascii, ending at
+ * offset off + digitPrintCount. Three phases:
  *
- * Three phases: while the high word is live, peel 8 digits per iteration via
- * three divides by 10^8 across rotating 96-bit chunks; once it fits in 64
- * bits, one divide by 10^8 per 8 digits; then the 1..7 leftover digits.
+ * - While dw1T != 0: peel 8 digits per outer iteration via three / 10^8 divisions on rotating
+ *   96-bit chunks, using mulhi64 for the high half of each multi-word divide.
+ * - Once the value fits in 64 bits: peel 8 digits at a time via a single / 10^8 per iteration.
+ * - For 1..7 leftover digits: delegate to renderTailDigitsBeforeIndex.
+ *
+ * Each 8-digit chunk is rendered by render8DigitsBeforeIndex. The caller must have allocated a
+ * buffer with at least off + digitPrintCount bytes, and is responsible for any leading-zero
+ * padding outside the rendered range.
  */
 static int u128ToAscii(int digitPrintCount, uint64_t dw1, uint64_t dw0, char *ascii, int off) {
+    // Returns digitPrintCount, unchanged from the input.
     uint64_t dw1T = dw1;
     uint64_t dw0T = dw0;
     int ich = off + digitPrintCount;
@@ -718,7 +760,10 @@ static int u128ToAscii(int digitPrintCount, uint64_t dw1, uint64_t dw0, char *as
     return digitPrintCount;
 }
 
-/* Write a signed decimal integer; returns the number of characters written. */
+/*
+ * Write a signed decimal exponent at off, returning its length. The magnitude never exceeds
+ * 6176, so it is at most four digits.
+ */
 static int appendInt(char *out, int v) {
     int signLen = 0;
     unsigned int magnitude = (unsigned int)v;
@@ -826,7 +871,10 @@ static int zerAscii(char *out, bool sign, int qExp) {
     return len;
 }
 
-/* qExp == 0: a plain integer, no radix point and no exponent. */
+/*
+ * Format a finite non-zero value with qExp == 0 as a plain integer sequence: no radix point,
+ * no exponent.
+ */
 static int fnzToIntegerAscii(char *out, bool sign, int digitLen, uint64_t dw1, uint64_t dw0) {
     verify(digitLen > 0);
     int signLen = sign ? 1 : 0;
@@ -839,8 +887,10 @@ static int fnzToIntegerAscii(char *out, bool sign, int digitLen, uint64_t dw1, u
 }
 
 /*
- * Fixed-point form: leading zeros, then the coefficient digits shifted right
- * by one position to make room for the radix point.
+ * Format a finite non-zero value in fixed-point notation, with an explicit radix point and the
+ * appropriate number of leading zeros -- "0.00012345". Renders the coefficient digits, then
+ * shifts the trailing digits right by one position to open a slot for the radix point. Leading
+ * zeros are written directly into the buffer before the digits.
  */
 static int fnzToDecimalPointAscii(char *out, bool sign, int qExp, int digitLen, uint64_t dw1, uint64_t dw0) {
     int digitsRightOfDecimal = -qExp;
@@ -870,8 +920,11 @@ static int fnzToDecimalPointAscii(char *out, bool sign, int qExp, int digitLen, 
 }
 
 /*
- * Normalized scientific form. The exponent sign is always written, per the
- * GDAS to-scientific-string form: 1.234E+5, never 1.234E5.
+ * Format a finite non-zero value in normalized scientific notation -- "1.234E+5",
+ * "-9.99E-200". Renders the coefficient digits, inserts a radix point after the leading digit
+ * when there is more than one, then appends E, the exponent sign and the absolute exponent.
+ * The sign is always written: + for non-negative exponents, - for negative, per the GDAS
+ * to-scientific-string form.
  */
 static int fnzToNormalizedScientificAscii(char *out, bool sign, int qExp, int digitLen, uint64_t dw1, uint64_t dw0) {
     verify(digitLen > 0);
@@ -901,9 +954,9 @@ static int fnzToNormalizedScientificAscii(char *out, bool sign, int qExp, int di
 }
 
 /*
- * Finite non-zero: pick the form. Integer when the quantum exponent is zero,
- * fixed-point when it is negative and the adjusted exponent is at least -6,
- * scientific otherwise -- the GDAS auto-select rule.
+ * Finite non-zero: pick the form. Integer when the quantum exponent is zero, fixed-point when
+ * it is negative and the adjusted exponent is at least -6, scientific otherwise -- the GDAS
+ * auto-select rule.
  */
 static int fnzAscii(char *out, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
     int digitLen = calcDigitLen128(dw1, dw0);
@@ -922,7 +975,11 @@ static int fnzAscii(char *out, bool sign, int qExp, uint64_t dw1, uint64_t dw0) 
  * bits -> text
  * ---------------------------------------------------------------------- */
 
-/* Unpack a BID128 encoding, per IEEE 754-2019 3.5.2, and render it. */
+/*
+ * Render a BID128 encoding into the caller's buffer. Field extraction follows IEEE 754-2019
+ * section 3.5.2; the class it lands on -- Infinity, NaN (quiet or signaling, with optional
+ * payload), zero (canonical or non-canonical), or finite non-zero -- picks the leaf renderer.
+ */
 static int decodeBid128toAscii(char *out, uint64_t bid128Hi, uint64_t bid128Lo) {
     verify(1 + W5 + T_WIDTH == 128);
 
@@ -966,7 +1023,11 @@ static int decodeBid128toAscii(char *out, uint64_t bid128Hi, uint64_t bid128Lo) 
     return fnzAscii(out, sign, qExp, dw1, dw0);
 }
 
-/* Unpack a DPD128 encoding and hand the pieces to the same renderers. */
+/*
+ * Render a DPD128 encoding into the caller's buffer. The peer of decodeBid128toAscii: both
+ * reduce an encoding to (sign, qExp, coefficient) and then dispatch to the same leaf
+ * renderers, which have never seen an interchange format.
+ */
 static int decodeDpd128toAscii(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo) {
     const int w = 12; /* exponent continuation width */
 
@@ -1035,6 +1096,12 @@ static int decodeDpd128toAscii(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo) 
  * region -- is format-neutral; the two formats diverge only here.
  * ------------------------------------------------------------------------ */
 
+/*
+ * Pack the sign, biased quantum exponent, and 113-bit coefficient into the BID128 encoding.
+ * Always uses the short-form encoding (combination field top bits not 11), which is correct
+ * for any canonical coefficient whose top 3 bits fit in 0..7. Preconditions: the exponent must
+ * be in [-6176, 6111] and the coefficient must have at most 34 decimal digits.
+ */
 static void bid128SetFinite(uint64_t *hi, uint64_t *lo, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
     verify(qExp >= Q_MIN && qExp <= Q_MAX);
     verify(calcDigitLen128(dw1, dw0) <= 34);
@@ -1046,13 +1113,12 @@ static void bid128SetFinite(uint64_t *hi, uint64_t *lo, bool sign, int qExp, uin
 }
 
 /*
- * Pack a finite value into DPD128: the same sign and the same 14-bit biased
- * exponent as BID, and a coefficient of the same 34 digits laid out as a
- * leading digit in the combination field plus eleven declets.
- *
- * The leading digit cannot be packed independently of the exponent -- DPD puts
- * it in the same five-bit prefix as the exponent's top two bits -- so unlike
- * BID there is no shared sign-and-exponent step to factor out.
+ * Pack a finite value into DPD128. The peer of bid128SetFinite: same inputs, same sign bit,
+ * same 14-bit biased exponent, and a coefficient of the same 34 digits -- laid out as a
+ * leading digit carried in the combination field plus eleven declets. The leading digit cannot
+ * be packed independently of the exponent: DPD puts it in the same five-bit prefix as the
+ * exponent's top two bits, so unlike BID there is no shared "pack sign and exponent" step to
+ * factor out.
  */
 static void dpd128SetFinite(uint64_t *hi, uint64_t *lo, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
     verify(qExp >= Q_MIN && qExp <= Q_MAX);
@@ -1086,6 +1152,12 @@ static void dpd128SetFinite(uint64_t *hi, uint64_t *lo, bool sign, int qExp, uin
     *lo = (declets5Hi << 60) | declets6Lo;
 }
 
+/*
+ * Pack a finite value into whichever interchange format the caller asked for. BID and DPD are
+ * peers: both carry the same sign, the same 14-bit biased exponent and the same 34-digit
+ * coefficient, and differ only in how that coefficient is laid out. Everything upstream of
+ * this point -- rounding, clamping and the underflow region -- is format-neutral.
+ */
 static void setFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
     if (formatIsBid) {
         bid128SetFinite(hi, lo, sign, qExp, dw1, dw0);
@@ -1102,10 +1174,9 @@ static void bid128SetNaN(uint64_t *hi, uint64_t *lo, bool sign, bool isSignaling
 }
 
 /*
- * Pack a NaN into DPD128. The payload occupies the whole 110-bit trailing
- * field as eleven declets -- 33 digits, with no leading digit in the
- * combination field, since G0..G4 are fixed at 11111 and G5 carries the
- * signaling flag.
+ * Pack a NaN into DPD128. The payload occupies the whole 110-bit trailing field as eleven
+ * declets -- 33 digits, with no leading digit in the combination field, since G0..G4 are fixed
+ * at 11111 and G5 carries the signaling flag.
  */
 static void dpd128SetNaN(uint64_t *hi, uint64_t *lo, bool sign, bool isSignaling, uint64_t payloadDw1, uint64_t payloadDw0) {
     verify(calcDigitLen128(payloadDw1, payloadDw0) <= 33);
@@ -1124,6 +1195,12 @@ static void dpd128SetNaN(uint64_t *hi, uint64_t *lo, bool sign, bool isSignaling
     *lo = (declets5Hi << 60) | declets6Lo;
 }
 
+/*
+ * Pack a NaN into whichever interchange format the caller asked for. A NaN payload is a
+ * coefficient, so the formats diverge here exactly as they do for finite values: BID keeps it
+ * as a binary integer, DPD as declets. Infinity by contrast has no coefficient, which is why
+ * it is byte-identical in both and needs no such split.
+ */
 static void setNaN(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign, bool isSignaling, uint64_t payloadDw1, uint64_t payloadDw0) {
     if (formatIsBid) {
         bid128SetNaN(hi, lo, sign, isSignaling, payloadDw1, payloadDw0);
@@ -1137,6 +1214,7 @@ static void setNaN(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign, bool
  * Finalize: rounding, clamping, underflow
  * ---------------------------------------------------------------------- */
 
+/* Encode Infinity (or -Infinity). */
 static void finalizeOverflow(uint64_t *hi, uint64_t *lo, bool sign) {
     *hi = (sign ? SIGN_BIT : 0) | INF_PATTERN_HI;
     *lo = 0;
@@ -1145,7 +1223,12 @@ static void finalizeOverflow(uint64_t *hi, uint64_t *lo, bool sign) {
 static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign,
                                    int qExpIn, uint64_t dw1In, uint64_t dw0In, int residueIn);
 
-/* Does this coefficient/exponent pair fit as a canonical encoding? */
+/*
+ * Test whether a coefficient/exponent pair fits as a canonical encoding: exponent in [-6176,
+ * 6111] and coefficient in [0, 10^34). Fast path uses the leading-zero bit count of the high
+ * word to cheaply confirm the coefficient has at most 113 bits, in which case it is
+ * necessarily less than 10^34 (since 2^113 > 10^34). Slow path compares against 10^34.
+ */
 static inline bool coeffQExpFit(uint64_t dw1, uint64_t dw0, int qExp) {
     if (qExp < Q_MIN || qExp > Q_MAX) {
         return false;
@@ -1158,9 +1241,12 @@ static inline bool coeffQExpFit(uint64_t dw1, uint64_t dw0, int qExp) {
 }
 
 /*
- * A finite value whose quantum exponent exceeds Q_MAX but whose coefficient
- * has leading capacity: absorb the excess into the coefficient, bringing the
- * exponent down to exactly Q_MAX without changing the value.
+ * Encode a finite value whose natural quantum exponent exceeds qMax (6111) but whose
+ * coefficient has enough leading capacity to absorb the excess. Multiplies the coefficient by
+ * 10^qExcess (where qExcess is qExp minus 6111), reducing the exponent to exactly 6111. This
+ * preserves the value while bringing the encoding into representable range. Caller must have
+ * verified that the coefficient has enough room (digitLen + qExcess <= 34); this function
+ * asserts the invariant and produces the clamped encoding.
  */
 static void finalizeClamping(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign, int qExp, uint64_t dw1, uint64_t dw0) {
     int qExcess = qExp - Q_MAX;
@@ -1179,10 +1265,12 @@ static void finalizeClamping(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool 
 }
 
 /*
- * The underflow boundary: the coefficient's most significant digit sits
- * exactly one position right of the representable range, so the coefficient
- * itself decides the rounding. Under ties-to-even the outcome is zero unless
- * the total residue is greater than half, zero being even.
+ * Handle the underflow boundary case where the most-significant digit of the coefficient sits
+ * exactly one position to the right of the representable range. The coefficient value itself
+ * determines rounding: comparing the coefficient against (10^digitLen) / 2 yields the residue
+ * class. Combined with any incoming residue, this drives a roundTiesToEven decision between
+ * zero (always even, the default outcome) and 1 ulp (the smallest subnormal, only when total
+ * residue is GT_HALF).
  */
 static void finalizeUnderflowBoundary(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign,
                                       uint64_t dw1, uint64_t dw0, int residueIn) {
@@ -1193,8 +1281,10 @@ static void finalizeUnderflowBoundary(uint64_t *hi, uint64_t *lo, bool formatIsB
     setFinite(hi, lo, formatIsBid, sign, Q_MIN, 0, (totalResidue == GT_HALF) ? 1 : 0);
 }
 
-/* Representable as a subnormal: truncate to the minimum exponent, keeping
- * what precision survives, and round what is left. */
+/*
+ * Representable as a subnormal: truncate to the minimum exponent, keeping what precision
+ * survives, and round what is left.
+ */
 static void finalizeSubnormal(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign, int qExpIn,
                               uint64_t dw1In, uint64_t dw0In, int residueIn) {
     int truncationNeeded = Q_MIN - qExpIn;
@@ -1218,8 +1308,16 @@ static void finalizeSubnormal(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool
     setFinite(hi, lo, formatIsBid, sign, qExpT, dw1T, dw0T);
 }
 
-/* Dispatch the three underflow cases: swamped to zero, the exact boundary,
- * and the subnormal region. */
+/*
+ * Dispatch underflow handling for a value whose exponent is below Emin (-6176). Three cases:
+ *
+ * - Truncation needed exceeds the digit count: result is zero (the value is below half the
+ *   smallest subnormal).
+ * - Truncation equals the digit count: boundary case where the leading digit of the
+ *   coefficient determines rounding.
+ * - Truncation is less than the digit count: representable as a subnormal; some precision is
+ *   preserved, with rounding.
+ */
 static void finalizeUnderflowRegion(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign,
                                     int qExp, uint64_t dw1, uint64_t dw0, int residue) {
     /* IEEE 754-2019 7.5 Underflow -- the subnormal region */
@@ -1238,16 +1336,32 @@ static void finalizeUnderflowRegion(uint64_t *hi, uint64_t *lo, bool formatIsBid
 }
 
 /*
- * Round a parsed coefficient/exponent pair to a canonical encoding, under
- * ties-to-even, and pack it.
+ * Round and finalize a finite parsed coefficient/exponent pair into its encoding. Implements
+ * roundTiesToEven rounding with full handling of the decimal128 boundary conditions: oversized
+ * coefficient, underflow to subnormal or zero, overflow to infinity, and the clamped-near-Emax
+ * region where a finite value with too-large quantum exponent can be representable by
+ * absorbing the excess into the coefficient.
  *
- *  1. fast path -- already in range and no rounding to do
- *  2. a zero coefficient with an out-of-range exponent clamps
- *  3. (special values never arrive here)
- *  4. underflow, when the exponent is below the minimum
- *  5. truncate to 34 digits -- REMOVED as unreachable, see the note in the body
- *  6. round, and renormalize if the coefficient rolls over to 10^34
- *  7. overflow to Infinity, or clamp near Emax
+ * Step 1 (fast path): if the input already fits within precision and range and no rounding is
+ * required (residue <= LT_HALF, or HALF with an even retained low bit), encode and return
+ * immediately. This picks up the vast majority of cases.
+ *
+ * Step 2 (zero coefficient): zeros that are out of qExp range get clamped to the valid range.
+ *
+ * Step 3 (special values): not applicable here -- special values are handled by callers before
+ * reaching this function.
+ *
+ * Step 4 (underflow): if the exponent is below Emin, divert to finalizeUnderflowRegion for
+ * subnormal handling.
+ *
+ * Step 5 (precision truncation): REMOVED as unreachable from a codec's callers -- see the note
+ * in the body, which also states what would have to change for it to be needed again.
+ *
+ * Step 6 (rounding): apply roundTiesToEven. If rounding causes the coefficient to roll over to
+ * 10^34, normalize to 10^33 and increment the exponent.
+ *
+ * Step 7 (overflow / clamping): if the exponent exceeds Emax, either absorb the excess into
+ * the coefficient (clamping near Emax) or overflow to infinity.
  */
 static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign,
                                    int qExpIn, uint64_t dw1In, uint64_t dw0In, int residueIn) {
@@ -1347,43 +1461,42 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
  * ---------------------------------------------------------------------- */
 
 /*
- * The code of the character at [index], or -1 at end of input.
- *
- * The parsers walk the input as character codes, so end-of-input is one more
- * code value rather than a bound test at every read. Nothing is given up by
- * spending the NUL on that marker: a C string has no way to carry an embedded
- * NUL in the first place, so one can never arrive as input data.
- *
- * A string that carries its own length can bound-test the index and is safe
- * for any index whatever. Here the
- * terminator IS the length, so the end can only be found by reading the byte,
- * and reading at one past the terminator would be out of bounds. That is safe
- * because -1 matches no character the parsers test for: every read that could
- * return it is followed by a comparison it fails, so control reaches a return
- * or leaves its loop before the next read. The `||` short-circuit in the NaN
- * letter chain is part of that guarantee, as is the `ch != ')'` test before
- * the read that follows a payload's closing paren. Keep it that way -- a read
- * issued after a -1 would step off the end of the string.
+ * The code of the character at index, or -1 past the end of the input. The parsers walk the
+ * input as character codes, so end-of-input is one more code value rather than a bound test at
+ * every read.
  */
 static inline int codeAt(const char *str, size_t index) {
+    // Nothing is given up by spending the NUL on the end-of-input marker: a C string has no way
+    // to carry an embedded NUL in the first place, so one can never arrive as input data. A
+    // string that carries its own length can bound-test the index and is safe for any index
+    // whatever. Here the terminator IS the length, so the end can only be found by reading the
+    // byte, and reading at one past the terminator would be out of bounds. That is safe because
+    // -1 matches no character the parsers test for: every read that could return it is followed
+    // by a comparison it fails, so control reaches a return or leaves its loop before the next
+    // read. The || short-circuit in the NaN letter chain is part of that guarantee, as is the
+    // ch != ')' test before the read that follows a payload's closing paren. Keep it that way
+    // -- a read issued after a -1 would step off the end of the string.
     int c = (unsigned char)str[index];
     return (c == 0) ? -1 : c;
 }
 
-/* The digit test, spelled out once. <ctype.h> isdigit() is locale-dependent and
- * takes an unsigned char or EOF, neither of which is what the reader yields. */
+/* The digit test, spelled out once: true for '0' through '9' and nothing else. */
 static inline bool isDigit(int ch) {
+    // isdigit() is locale-dependent and takes an unsigned char or EOF, neither of which is what
+    // the reader yields.
     return ch >= '0' && ch <= '9';
 }
 
 /*
- * Parse a finite numeral: optional radix point, optional E exponent, any
- * number of digits.
+ * Parse a finite decimal numeral and produce the corresponding encoding. Accepts an optional
+ * decimal point, an optional E/e exponent (with optional +/- sign), and any number of
+ * significant digits. Coefficients with more than 34 significant digits are accepted; leading
+ * zeros before a non-zero digit are flushed; the digits past 34 are properly tracked as
+ * residue for subsequent roundTiesToEven rounding. Excess exponent magnitudes are clamped to
+ * 9999, which is sufficient for the rounding logic to detect overflow or underflow.
  *
- * Coefficients with more than 34 significant digits are accepted; leading
- * zeros are flushed, and the digits past 34 are tracked as residue for the
- * ties-to-even rounding that follows. Exponent magnitudes clamp to 9999,
- * which is enough for finalize to detect overflow or underflow.
+ * Sign is taken from the sign parameter (already consumed by the dispatcher); the leading
+ * character chFirst is the first digit or . and is processed by the main loop.
  */
 static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign,
                                         int chFirst, const char *str, size_t startPos) {
@@ -1517,7 +1630,10 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
     return NULL;
 }
 
-/* Parse Infinity, or its three-letter abbreviation Inf, case-insensitively. */
+/*
+ * Parse the keyword Infinity (or its 3-letter abbreviation Inf), case-insensitively, and
+ * produce the corresponding encoding. Any other input is rejected.
+ */
 static const char *parseInfinityText(uint64_t *hi, uint64_t *lo, bool sign,
                                      int chFirst, const char *str, size_t startPos) {
     size_t pos = startPos;
@@ -1547,23 +1663,22 @@ static const char *parseInfinityText(uint64_t *hi, uint64_t *lo, bool sign,
 }
 
 /*
- * Parse NaN, qNaN or sNaN, case-insensitively, with an optional payload of
- * decimal digits. A payload of 34 or more digits AS WRITTEN is non-canonical
- * and reads as zero, per IEEE 754-2019 3.5.2.
+ * Parse NaN, qNaN, or sNaN (case-insensitive) with an optional decimal payload, and produce
+ * the corresponding encoding. Payloads of 34+ digits AS WRITTEN are non-canonical and produce
+ * a zero payload per IEEE 754-2019 section 3.5.2.
  *
- * The payload may be written bare (NaN123) or enclosed in parentheses
- * (NaN(123)). The parenthesised form is positional and balanced: the '(' must
- * follow the word immediately, at least one digit must appear, and the ')'
- * must be the last character of the input. So NaN(1)2(3), NaN(1, NaN(1] and
- * NaN() are all rejected, and NaN[1] and NaN{1} are not this form at all.
+ * The payload may be written bare (NaN123) or enclosed in parentheses (NaN(123)). The
+ * parenthesised form is positional and balanced: the ( must follow the word immediately, at
+ * least one digit must appear, and the ) must be the last character of the input. So
+ * NaN(1)2(3), NaN(1, NaN(1] and NaN() are all rejected, and NaN[1] / NaN{1} are not this form
+ * at all.
  *
- * The reason this spelling exists at all is that C's
- * own strtod reads NAN(n-char-sequence), so
- * the spelling reaches a C caller from the platform itself. The resemblance
- * stops at the parentheses -- strtod's sequence is letters, digits and
- * underscores read as an implementation-defined integer (NAN(abc) and
- * NAN(0x1c8) are legal there), while a decimal128 payload is decimal digits.
- * This is a paren-tolerant spelling of our own payload syntax, not C's.
+ * The reason this spelling exists at all is that the platform's own strtod reads
+ * NAN(n-char-sequence), so the spelling reaches a caller from the platform itself. The
+ * resemblance stops at the parentheses -- strtod's sequence is letters, digits and underscores
+ * read as an implementation-defined integer (NAN(abc) and NAN(0x1c8) are legal there), while a
+ * decimal128 payload is decimal digits. This is a paren-tolerant spelling of our own payload
+ * syntax, not strtod's.
  */
 static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bool sign,
                                 int chFirst, const char *str, size_t startPos) {
@@ -1641,7 +1756,12 @@ static const char *parseNanText(uint64_t *hi, uint64_t *lo, bool formatIsBid, bo
     return NULL;
 }
 
-/* Read the optional sign, then dispatch on the leading character. */
+/*
+ * Top-level dispatcher for parsing a decimal character sequence into an encoding. Reads
+ * optional sign, then dispatches by leading character to the finite-value, infinity, or NaN
+ * parser. The leading character is also passed through to the dispatched parser so it doesn't
+ * have to re-read what the dispatcher already consumed.
+ */
 static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *str) {
     size_t pos = 0;
     int chFirst = codeAt(str, pos);
