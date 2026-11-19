@@ -104,9 +104,6 @@ extern "C" {
 /*
  * Render a BID128 encoding into a caller-supplied buffer, allocating nothing.
  *
- * Writes a NUL-terminated string into out, which must have room for
- * D128TEXT_MAX_LEN bytes, and returns the length not counting the NUL.
- *
  * The output is the GDAS to-scientific-string form: integer notation when the
  * quantum exponent is zero (e.g. "123"), plain notation when the quantum
  * exponent is negative and the adjusted exponent is at least -6 (e.g.
@@ -127,14 +124,16 @@ extern "C" {
  * coefficient (>= 10^34) renders as zero at the encoded exponent, and a NaN
  * payload >= 10^33 renders as no payload, both per IEEE 754-2019 section
  * 3.5.2.
+ *
+ * In C: writes the ASCII text into out starting at out[0], followed by a NUL,
+ * and returns its length not counting the NUL. out must have room for
+ * D128TEXT_MAX_LEN bytes; C cannot check that, so a shorter buffer is
+ * overrun.
  */
 int d128text_bid128ToAscii(char *out, uint64_t hi, uint64_t lo);
 
 /*
  * Render a DPD128 encoding into a caller-supplied buffer, allocating nothing.
- *
- * Writes a NUL-terminated string into out, which must have room for
- * D128TEXT_MAX_LEN bytes, and returns the length not counting the NUL.
  *
  * The output is the GDAS to-scientific-string form: integer notation when the
  * quantum exponent is zero (e.g. "123"), plain notation when the quantum
@@ -157,17 +156,21 @@ int d128text_bid128ToAscii(char *out, uint64_t hi, uint64_t lo);
  * declets cannot reach 10^34; a NaN payload, carried in those same declets, is
  * likewise always in range; and non-canonical declets decode to their value,
  * per IEEE 754-2019 section 3.5.2.
+ *
+ * In C: writes the ASCII text into out starting at out[0], followed by a NUL,
+ * and returns its length not counting the NUL. out must have room for
+ * D128TEXT_MAX_LEN bytes; C cannot check that, so a shorter buffer is
+ * overrun.
  */
 int d128text_dpd128ToAscii(char *out, uint64_t hi, uint64_t lo);
 
 /*
  * Parse a decimal character sequence into a BID128 encoding.
  *
- * Returns NULL on success, with the encoding written to *hi and *lo. On
- * failure returns a human-readable message and writes the canonical positive
- * quiet NaN, so a caller who ignores the return value still observes a legal
- * IEEE 754-2019 datum rather than stale memory. The message is the engine's
- * ParseStatus name for the failure -- EMPTY_STRING, INVALID_FORMAT,
+ * On failure the encoding written is the canonical positive quiet NaN, so a
+ * caller who discards the message still observes a legal IEEE 754-2019 datum
+ * rather than stale or partial data. The message is the engine's ParseStatus
+ * name for the failure -- EMPTY_STRING, INVALID_FORMAT,
  * UNEXPECTED_CHAR, DOUBLE_DOT, NO_COEFFICIENT_DIGIT, NO_EXPONENT_DIGIT,
  * INVALID_UNDERSCORE_LOCATION, FAILURE_PARSING_INFINITY or
  * FAILURE_PARSING_NAN -- and the conformance suite asserts it against the
@@ -203,17 +206,19 @@ int d128text_dpd128ToAscii(char *out, uint64_t hi, uint64_t lo);
  * declets. The same text parses to peer encodings of the same value in either
  * format, and the canonical positive quiet NaN is the same bit pattern in
  * both.
+ *
+ * In C: returns NULL on success, with the encoding written to *hi (the high 64
+ * bits) and *lo (the low 64). On failure returns the message.
  */
 const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *str);
 
 /*
  * Parse a decimal character sequence into a DPD128 encoding.
  *
- * Returns NULL on success, with the encoding written to *hi and *lo. On
- * failure returns a human-readable message and writes the canonical positive
- * quiet NaN, so a caller who ignores the return value still observes a legal
- * IEEE 754-2019 datum rather than stale memory. The message is the engine's
- * ParseStatus name for the failure -- EMPTY_STRING, INVALID_FORMAT,
+ * On failure the encoding written is the canonical positive quiet NaN, so a
+ * caller who discards the message still observes a legal IEEE 754-2019 datum
+ * rather than stale or partial data. The message is the engine's ParseStatus
+ * name for the failure -- EMPTY_STRING, INVALID_FORMAT,
  * UNEXPECTED_CHAR, DOUBLE_DOT, NO_COEFFICIENT_DIGIT, NO_EXPONENT_DIGIT,
  * INVALID_UNDERSCORE_LOCATION, FAILURE_PARSING_INFINITY or
  * FAILURE_PARSING_NAN -- and the conformance suite asserts it against the
@@ -249,6 +254,9 @@ const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *str);
  * declets. The same text parses to peer encodings of the same value in either
  * format, and the canonical positive quiet NaN is the same bit pattern in
  * both.
+ *
+ * In C: returns NULL on success, with the encoding written to *hi (the high 64
+ * bits) and *lo (the low 64). On failure returns the message.
  */
 const char *d128text_dpd128Parse(uint64_t *hi, uint64_t *lo, const char *str);
 
