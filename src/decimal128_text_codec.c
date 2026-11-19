@@ -764,11 +764,11 @@ static int u128ToAscii(int digitPrintCount, uint64_t dw1, uint64_t dw0, char *as
  * Write a signed decimal exponent at off, returning its length. The magnitude never exceeds
  * 6176, so it is at most four digits.
  */
-static int appendInt(char *out, int v) {
+static int appendInt(char *out, int off, int v) {
     int signLen = 0;
     unsigned int magnitude = (unsigned int)v;
     if (v < 0) {
-        out[0] = '-';
+        out[off] = '-';
         signLen = 1;
         magnitude = (unsigned int)(-(long)v);
     }
@@ -782,7 +782,7 @@ static int appendInt(char *out, int v) {
     } else {
         digitLen = 1;
     }
-    renderTailDigitsBeforeIndex(digitLen, (uint64_t)magnitude, out, signLen + digitLen);
+    renderTailDigitsBeforeIndex(digitLen, (uint64_t)magnitude, out, off + signLen + digitLen);
     return signLen + digitLen;
 }
 
@@ -866,7 +866,7 @@ static int zerAscii(char *out, bool sign, int qExp) {
     out[0] = '-'; /* overwritten by the '0' when unsigned */
     memcpy(out + signLen, ZERO_EXP_TEXT, (size_t)wordLen);
     out[signLen + wordLen] = '+'; /* overwritten by appendInt's '-' when qExp < 0 */
-    int len = baseLen + appendInt(out + baseLen, qExp);
+    int len = baseLen + appendInt(out, baseLen, qExp);
     out[len] = '\0';
     return len;
 }
