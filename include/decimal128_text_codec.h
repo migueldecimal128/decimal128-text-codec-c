@@ -204,7 +204,7 @@ int d128text_dpd128ToAscii(char *out, uint64_t hi, uint64_t lo);
  * format, and the canonical positive quiet NaN is the same bit pattern in
  * both.
  */
-const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *text);
+const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *str);
 
 /*
  * Parse a decimal character sequence into a DPD128 encoding.
@@ -250,7 +250,7 @@ const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *text);
  * format, and the canonical positive quiet NaN is the same bit pattern in
  * both.
  */
-const char *d128text_dpd128Parse(uint64_t *hi, uint64_t *lo, const char *text);
+const char *d128text_dpd128Parse(uint64_t *hi, uint64_t *lo, const char *str);
 
 #ifdef __cplusplus
 }

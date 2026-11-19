@@ -45,9 +45,9 @@
 #define CODEC_NORETURN _Noreturn
 #endif
 
-CODEC_NORETURN static void impossible(const char *what) {
+CODEC_NORETURN static void impossible(const char *message) {
     fputs("decimal128-text-codec: impossible state: ", stderr);
-    fputs(what, stderr);
+    fputs(message, stderr);
     fputc('\n', stderr);
     abort();
 }
@@ -82,7 +82,7 @@ CODEC_NORETURN static void impossible(const char *what) {
 static int decodeBid128toAscii(char *out, uint64_t bid128Hi, uint64_t bid128Lo);
 static int decodeDpd128toAscii(char *out, uint64_t dpd128Hi, uint64_t dpd128Lo);
 static const char *encodeStringOrError(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *str);
-static const char *parseInto(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *text);
+static const char *parseInto(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *str);
 
 int d128text_bid128ToAscii(char *out, uint64_t hi, uint64_t lo) {
     demand(out != NULL);
@@ -94,17 +94,17 @@ int d128text_dpd128ToAscii(char *out, uint64_t hi, uint64_t lo) {
     return decodeDpd128toAscii(out, hi, lo);
 }
 
-const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *text) {
-    return parseInto(hi, lo, true, text);
+const char *d128text_bid128Parse(uint64_t *hi, uint64_t *lo, const char *str) {
+    return parseInto(hi, lo, true, str);
 }
 
-const char *d128text_dpd128Parse(uint64_t *hi, uint64_t *lo, const char *text) {
-    return parseInto(hi, lo, false, text);
+const char *d128text_dpd128Parse(uint64_t *hi, uint64_t *lo, const char *str) {
+    return parseInto(hi, lo, false, str);
 }
 
-static const char *parseInto(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *text) {
-    demand(hi != NULL && lo != NULL && text != NULL);
-    const char *errorStr = encodeStringOrError(hi, lo, formatIsBid, text);
+static const char *parseInto(uint64_t *hi, uint64_t *lo, bool formatIsBid, const char *str) {
+    demand(hi != NULL && lo != NULL && str != NULL);
+    const char *errorStr = encodeStringOrError(hi, lo, formatIsBid, str);
     if (errorStr != NULL) {
         /* Always write the out-params, so a caller who discards the return
          * value still observes a legal datum. The canonical positive quiet NaN
