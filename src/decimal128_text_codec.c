@@ -336,9 +336,9 @@ static inline int calcDigitLen128(uint64_t dw1, uint64_t dw0) {
     uint64_t p1 = POW10[pow10Offset + 1];
     uint64_t p0 = POW10[pow10Offset];
     if (dw1 != p1) {
-        return (dw1 < p1) ? hiDigitCount - 1 : hiDigitCount;
+        return hiDigitCount - ((dw1 < p1) ? 1 : 0);
     }
-    return (dw0 < p0) ? hiDigitCount - 1 : hiDigitCount;
+    return hiDigitCount - ((dw0 < p0) ? 1 : 0);
 }
 
 /*
@@ -683,7 +683,6 @@ static void renderTailDigitsBeforeIndex(int renderDigitCount, uint64_t dw, char 
     uint64_t t = dw;
     int remainingDigitCount = renderDigitCount;
     int ib = offMaxx;
-    demand(offMaxx - renderDigitCount >= 0);
     while (remainingDigitCount >= 4) {
         uint64_t t0 = mulhi64(t, M_U64_DIV_1E4) >> S_U64_DIV_1E4;
         uint64_t abcd = t - (t0 * 10000);
@@ -694,6 +693,7 @@ static void renderTailDigitsBeforeIndex(int renderDigitCount, uint64_t dw, char 
         uint64_t b = ab - (a * 10);
         uint64_t c = (cd * M_U32_DIV_1E1) >> S_U32_DIV_1E1;
         uint64_t d = cd - (c * 10);
+        demand(ib - 4 >= 0);
         ascii[ib - 4] = (char)('0' + a);
         ascii[ib - 3] = (char)('0' + b);
         ascii[ib - 2] = (char)('0' + c);
@@ -894,10 +894,8 @@ static int fnzToIntegerAscii(char *out, bool sign, int digitLen, uint64_t dw1, u
  */
 static int fnzToDecimalPointAscii(char *out, bool sign, int qExp, int digitLen, uint64_t dw1, uint64_t dw0) {
     int digitsRightOfDecimal = -qExp;
-    int leadingZeroCount = 1 + digitsRightOfDecimal - digitLen;
-    if (leadingZeroCount < 0) {
-        leadingZeroCount = 0;
-    }
+    int leadingZeroSigned = 1 + digitsRightOfDecimal - digitLen;
+    int leadingZeroCount = (leadingZeroSigned > 0) ? leadingZeroSigned : 0;
     int signLen = sign ? 1 : 0;
     int decimalPointLen = 1;
     int totalLen = signLen + leadingZeroCount + decimalPointLen + digitLen;
@@ -1373,13 +1371,8 @@ static void roundAndFinalizeFinite(uint64_t *hi, uint64_t *lo, bool formatIsBid,
         }
         /* Step 2 */
         if ((dw1In | dw0In) == 0) {
-            int qClamped = qExpIn;
-            if (qClamped > Q_MAX) {
-                qClamped = Q_MAX;
-            }
-            if (qClamped < Q_MIN) {
-                qClamped = Q_MIN;
-            }
+            int qClamped = (qExpIn < Q_MAX) ? qExpIn : Q_MAX;
+            qClamped = (qClamped > Q_MIN) ? qClamped : Q_MIN;
             setFinite(hi, lo, formatIsBid, sign, qClamped, 0, 0);
             return;
         }
@@ -1624,7 +1617,8 @@ static const char *parseFiniteValueText(uint64_t *hi, uint64_t *lo, bool formatI
      * so both corrections land here.
      */
     int signedExp = expSign ? -exp : exp;
-    int excessDigits = (significantDigitCount > 34) ? significantDigitCount - 34 : 0;
+    int excessSigned = significantDigitCount - 34;
+    int excessDigits = (excessSigned > 0) ? excessSigned : 0;
     int qExp = signedExp - fractionalDigitCount + excessDigits;
     roundAndFinalizeFinite(hi, lo, formatIsBid, sign, qExp, dw1, dw0, residue);
     return NULL;
